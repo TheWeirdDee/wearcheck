@@ -87,8 +87,8 @@ export function Compare({ originalUrl, previewUrl, previewAlt }: { originalUrl: 
     ? `translate(${Math.max(-(scale - 1) / 2, Math.min((scale - 1) / 2, scale * (0.5 - area.cx))) * 100}%, ${Math.max(-(scale - 1) / 2, Math.min((scale - 1) / 2, scale * (0.5 - area.cy))) * 100}%) scale(${scale})`
     : "none";
   const imgCls = "absolute inset-0 block h-full w-full object-contain transition-transform duration-500 ease-[cubic-bezier(.22,1,.36,1)] motion-reduce:transition-none";
-  // Frame height leaves room for the site header, progress bar and the controls row.
-  const frameMax = "calc(100svh - 11.5rem)";
+  // Frame height leaves room for the sticky header, the controls row above it and a small margin below.
+  const frameMax = "calc(100svh - 10.75rem)";
 
   return (
     <div>
