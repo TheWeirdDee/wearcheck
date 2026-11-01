@@ -48,7 +48,7 @@ export const POST = handler("assessment", async (req: Request, ctx: { params: Pr
     obs = row as unknown as NonNullable<typeof obs>;
   }
   if (body.corrections) {
-    const merged = { ...obs.user_corrections, ...body.corrections, rule_answers: { ...(obs.user_corrections.rule_answers ?? {}), ...(body.corrections.rule_answers ?? {}) } };
+    const merged = { ...obs.user_corrections, ...body.corrections, rule_answers: { ...(obs.user_corrections.rule_answers ?? {}), ...(body.corrections.rule_answers ?? {}) }, garment_colours: { ...(obs.user_corrections.garment_colours ?? {}), ...(body.corrections.garment_colours ?? {}) } };
     const parsed = UserCorrections.parse(merged);
     await db()`update wearcheck.outfit_observations set user_corrections = ${db().json(parsed as never)} where id = ${obs.id}`;
     obs = { ...obs, user_corrections: parsed };
