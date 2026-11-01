@@ -13,7 +13,7 @@ export default async function RequirementsPage({ params }: { params: Promise<{ i
     const src = await latestEventSource(check.id);
     return (
       <div className="max-w-2xl">
-        <h1 className="text-3xl font-bold">{src?.extraction_status === "failed" ? "We couldn't read that invitation" : "Add the event first"}</h1>
+        <h1 className="t-2">{src?.extraction_status === "failed" ? "We couldn't read that invitation" : "Add the event first"}</h1>
         <p className="mt-3 text-ink-2">{src?.extraction_status === "failed" ? "You can try another image, or enter the details yourself." : "Tell us about the occasion so we have something to check against."}</p>
         <Link href={`/check/${check.id}/invitation`} className="btn btn-primary mt-6">Go to event details</Link>
       </div>
