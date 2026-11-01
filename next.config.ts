@@ -24,6 +24,7 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     "/api/**": ["./public/reference/**", "./node_modules/@fontsource/inter-tight/files/inter-tight-latin-{500,600,700}-normal.woff", "./node_modules/@fontsource/inter/files/inter-latin-{400,500,600}-normal.woff"],
     "/check/**": ["./node_modules/@fontsource/inter-tight/files/*.woff", "./node_modules/@fontsource/inter/files/*.woff"],
+    "/opengraph-image": ["./public/editorial/hero-brick-wall.jpg", "./node_modules/@fontsource/inter-tight/files/inter-tight-latin-700-normal.woff", "./node_modules/@fontsource/inter/files/inter-latin-400-normal.woff"],
   },
   async headers() {
     return [
