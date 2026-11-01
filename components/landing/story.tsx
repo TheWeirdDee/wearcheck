@@ -78,8 +78,8 @@ const PANELS: { kicker: string; title: string; body: string; visual: React.React
     title: "Keep it — or preview one justified change.",
     body: "If nothing conflicts, keeping your outfit is the result: no render, nothing to buy. If one item is the problem, choose a single alternative and YouCam renders it onto your own photo, so you can compare before you decide.",
     visual: (
-      <div className="flex h-full min-h-[24rem] items-center justify-center bg-stone p-5 sm:p-8">
-        <div className="grid w-full max-w-[30rem] grid-cols-[38%_1fr] gap-4 bg-raised p-4 shadow-[0_30px_60px_-40px_rgba(0,0,0,0.5)] sm:gap-5 sm:p-5">
+      <div className="flex h-full min-h-[24rem] min-w-0 items-center justify-center bg-stone p-4 sm:p-8">
+        <div className="grid w-full min-w-0 max-w-[30rem] grid-cols-[minmax(0,38%)_minmax(0,1fr)] gap-3 bg-raised p-4 shadow-[0_30px_60px_-40px_rgba(0,0,0,0.5)] sm:gap-5 sm:p-5">
           <div className="relative aspect-[4/5] bg-photo">
             <Image src={EDITORIAL.jumpsuit.src} alt="" fill sizes="200px" className="object-cover object-top" onLoad={refresh} />
           </div>
@@ -110,11 +110,14 @@ export function Story() {
   const triggerRef = useRef<ScrollTrigger | null>(null);
   const [active, setActive] = useState(0);
   const [pinned, setPinned] = useState(false);
+  // Set to false when the viewport is too short for the pinned panels to hold their text; the row is used instead.
+  const [pinFits, setPinFits] = useState(true);
 
   useEffect(() => {
     gsap.registerPlugin(ScrollTrigger);
     const mm = gsap.matchMedia();
-    mm.add("(min-width: 1024px) and (prefers-reduced-motion: no-preference)", () => {
+    if (!pinFits) return () => mm.revert();
+    mm.add("(min-width: 1024px) and (min-height: 760px) and (prefers-reduced-motion: no-preference)", () => {
       const track = trackRef.current!;
       const section = sectionRef.current!;
       setPinned(true);
@@ -136,8 +139,13 @@ export function Story() {
       triggerRef.current = tween.scrollTrigger ?? null;
       const ro = new ResizeObserver(() => ScrollTrigger.refresh());
       ro.observe(track);
-      // Layout settles after the switch to pinned mode and font loading.
-      requestAnimationFrame(() => ScrollTrigger.refresh());
+      // Layout settles after the switch to pinned mode and font loading. If any panel's content is
+      // taller than the space the pin leaves, fall back to the scrollable row rather than clip or overlap text.
+      const overflows = () => (Array.from(track.children) as HTMLElement[]).some((li) => li.scrollHeight > li.clientHeight + 1);
+      requestAnimationFrame(() => {
+        if (overflows()) setPinFits(false);
+        else ScrollTrigger.refresh();
+      });
       document.fonts?.ready.then(() => ScrollTrigger.refresh());
       return () => {
         ro.disconnect();
@@ -149,7 +157,7 @@ export function Story() {
       };
     });
     return () => mm.revert();
-  }, []);
+  }, [pinFits]);
 
   function onTrackScroll() {
     if (pinned) return;
@@ -183,10 +191,10 @@ export function Story() {
       aria-labelledby="story-title"
       className={`relative overflow-hidden border-y border-line bg-raised ${pinned ? "flex h-[calc(100svh-4.5rem)] flex-col" : ""}`}
     >
-      <div className={`wrap flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between ${pinned ? "pt-8 pb-6" : "pt-16 pb-8 lg:pt-24"}`}>
+      <div className={`wrap flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between ${pinned ? "pt-7 pb-5" : "pt-16 pb-8 lg:pt-24"}`}>
         <div>
           <p className="eyebrow">How it works</p>
-          <h2 id="story-title" className="t-1 mt-4 max-w-[16ch]">From invitation to decision.</h2>
+          <h2 id="story-title" className={`mt-4 max-w-[16ch] ${pinned ? "t-2" : "t-1"}`}>From invitation to decision.</h2>
         </div>
         <div className="flex items-center gap-4">
           <p className="font-display text-lg tabular-nums" aria-live="polite">
@@ -215,7 +223,7 @@ export function Story() {
         ref={trackRef}
         onScroll={onTrackScroll}
         className={`story-track relative flex gap-5 px-[clamp(1rem,4vw,3.5rem)] lg:gap-8 ${
-          pinned ? "min-h-0 flex-1 py-8" : "items-start snap-x snap-mandatory overflow-x-auto scroll-px-[clamp(1rem,4vw,3.5rem)] py-8 pb-16 lg:pb-24"
+          pinned ? "min-h-0 flex-1 py-6" : "snap-x snap-mandatory overflow-x-auto scroll-px-[clamp(1rem,4vw,3.5rem)] pt-8 pb-6"
         }`}
         aria-label="Steps"
         // Keyboard users can scroll the swipeable row with arrow keys; not needed once scrolling is pinned.
@@ -224,14 +232,14 @@ export function Story() {
         {PANELS.map((p, i) => (
           <li
             key={p.kicker}
-            className={`grid flex-none snap-start grid-rows-[auto_1fr] gap-6 bg-bg lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] lg:grid-rows-1 lg:gap-0 ${
-              pinned ? "h-full w-[min(1120px,80vw)]" : "w-[86%] sm:w-[72%] lg:w-[min(1120px,80vw)] lg:h-[min(640px,72svh)]"
+            className={`grid flex-none snap-start grid-cols-[minmax(0,1fr)] grid-rows-[auto_1fr] gap-6 bg-bg pb-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] lg:grid-rows-1 lg:gap-0 lg:pb-0 [&>*]:min-w-0 ${
+              pinned ? "h-full w-[min(1120px,80vw)]" : "w-[86%] sm:w-[72%] lg:w-[min(1120px,80vw)] lg:min-h-[min(600px,72svh)]"
             }`}
             aria-label={`Step ${i + 1} of ${PANELS.length}: ${p.kicker}`}
           >
             <div className="relative aspect-[4/5] min-h-0 sm:aspect-[4/3] lg:aspect-auto">{p.visual}</div>
-            <div className="flex flex-col px-1 pb-2 lg:justify-between lg:p-10 xl:p-12">
-              <p className="font-display text-[3.5rem] font-semibold leading-none tracking-[-0.05em] text-accent lg:text-[5rem]">{String(i + 1).padStart(2, "0")}</p>
+            <div className="flex flex-col px-4 sm:px-5 lg:justify-between lg:p-9 xl:p-11">
+              <p className="font-display text-[3rem] font-semibold leading-none tracking-[-0.05em] text-accent lg:text-[4.25rem]">{String(i + 1).padStart(2, "0")}</p>
               <div className="mt-4 lg:mt-0">
                 <p className="eyebrow plain">{p.kicker}</p>
                 <h3 className="t-3 mt-3 max-w-[22ch]">{p.title}</h3>
@@ -242,7 +250,7 @@ export function Story() {
         ))}
       </ol>
       {!pinned ? null : <p className="sr-only">Scroll down to move through the steps, or use the previous and next buttons.</p>}
-      <p className={`wrap photo-credit ${pinned ? "pb-5" : "-mt-10 pb-12 lg:-mt-16 lg:pb-16"}`}>
+      <p className={`wrap photo-credit ${pinned ? "pb-8" : "pb-16 lg:pb-24"}`}>
         Illustration of how a check reads, on editorial photos ({EDITORIAL.colonnade.credit.replace("Editorial photo · ", "")}; {EDITORIAL.jumpsuit.credit.replace("Editorial photo · ", "")}). These photos were not assessed and no preview was generated.
       </p>
     </section>
