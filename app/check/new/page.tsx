@@ -20,7 +20,7 @@ export default function NewCheckPage() {
       <div className="flex flex-col justify-center">
         <p className="eyebrow">New check</p>
         <h1 className="t-1 mt-5 max-w-[14ch]">Start an outfit check.</h1>
-        <p className="lede mt-5 max-w-[40ch]">No sign-up. Your check is private to this browser and deleted after 24 hours.</p>
+        <p className="lede mt-5 max-w-[40ch]">No sign-up. Your check is private to this browser, locks after 24 hours and is deleted by a daily cleanup within the next day.</p>
         <ol className="mt-9 divide-y divide-line border-y border-line">
           {STEPS.map(([t, d], i) => (
             <li key={t} className="grid grid-cols-[2.5rem_1fr] gap-3 py-4">
