@@ -1,6 +1,11 @@
 import type { NextConfig } from "next";
 
+// Deployed commit, passed at build time (`vercel deploy --build-env WEARCHECK_COMMIT=$(git rev-parse HEAD)`),
+// so the live site can be checked against the pushed branch. Not secret.
+const commitHeader = { key: "X-WearCheck-Commit", value: process.env.WEARCHECK_COMMIT || "unknown" };
+
 const securityHeaders = [
+  commitHeader,
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   { key: "X-Frame-Options", value: "DENY" },
