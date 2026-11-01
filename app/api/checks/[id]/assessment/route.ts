@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { assertSameOrigin, handler, json, readJson } from "@/lib/api";
-import { modelId, observeOutfit } from "@/lib/ai/gemini";
+import { observeOutfit } from "@/lib/ai/gemini";
 import { previewableCategories } from "@/lib/catalogue";
 import { currentAssessment, currentRequirements, latestObservation, photoAsset, requireOwnedCheck, setStep, trackEvent } from "@/lib/checks";
 import { db } from "@/lib/db";
@@ -41,10 +41,10 @@ export const POST = handler("assessment", async (req: Request, ctx: { params: Pr
   if (!obs || body.reobserve) {
     await limit("vision", check.guest_session_id, "AI readings");
     await limit("visionGlobal", "global", "AI readings today");
-    const observation = await observeOutfit(await getObject(photo.storage_key), reqs.json);
+    const { value: observation, model } = await observeOutfit(await getObject(photo.storage_key), reqs.json);
     const [row] = await db()`
       insert into wearcheck.outfit_observations (check_id, photo_asset_id, json, model_id)
-      values (${check.id}, ${photo.id}, ${db().json(observation as never)}, ${modelId()}) returning *`;
+      values (${check.id}, ${photo.id}, ${db().json(observation as never)}, ${model}) returning *`;
     obs = row as unknown as NonNullable<typeof obs>;
   }
   if (body.corrections) {
