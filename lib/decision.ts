@@ -3,7 +3,7 @@ import { catalogueItem, type CatalogueItem } from "./catalogue";
 import { type CheckRow, currentAssessment, currentRequirements, photoAsset } from "./checks";
 import { db } from "./db";
 import type { JobRow } from "./jobs";
-import type { AssessmentResult, Finding, Requirements } from "./schemas";
+import { type AssessmentResult, type Finding, type Requirements, COLOUR_LABEL } from "./schemas";
 
 export type DecisionData = {
   check: CheckRow;
@@ -62,3 +62,21 @@ export function dressCodeSource(r: Requirements): string {
 }
 
 export const CARD_DISCLAIMER = "Style guidance, not event organiser approval or a guarantee of fit.";
+
+/**
+ * A successful render is not a resolved requirement: WearCheck doesn't re-observe the generated image,
+ * so the preview and the card tell the person exactly what to check themselves.
+ */
+export function unresolvedNote(finding: Finding, r: Requirements): string | null {
+  const rule = finding.rule_id ? r.rules.find((x) => x.id === finding.rule_id) : null;
+  const quote = rule ? `“${rule.evidence_text ?? rule.summary}”` : null;
+  if (rule?.type === "colour_exclusion") {
+    return `WearCheck doesn't re-check the generated image. If any ${rule.colours.map((c) => COLOUR_LABEL[c]).join(" or ")} clothing is still visible in the preview — a layer underneath, cuffs, a collar — it hasn't resolved ${quote}.`;
+  }
+  if (rule && (rule.type === "footwear_preference" || rule.type === "footwear_requirement")) {
+    return `WearCheck doesn't re-check the generated image. Look at the shoes in the preview and judge whether they meet ${quote}; it shows appearance, not grip or comfort on the ground.`;
+  }
+  if (quote) return `WearCheck doesn't re-check the generated image against ${quote}. Judge for yourself whether the preview meets it.`;
+  if (finding.kind === "practical") return "WearCheck doesn't re-check the generated image. It shows appearance only, not how the shoes behave on the ground.";
+  return null;
+}
