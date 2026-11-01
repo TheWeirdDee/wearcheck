@@ -23,7 +23,7 @@ export const DEMO_CASES_PUBLIC: { slug: string; outcome: string; title: string; 
     slug: "compatible-keep",
     outcome: "Likely result: keep your outfit",
     title: "A team dinner, nothing to fix",
-    challenge: "Smart casual, no restrictions. When nothing conflicts, the check ends there — no preview, nothing to buy.",
+    challenge: "Formal, no trainers, avoid red. When every requirement is checked and nothing conflicts, the check ends there — no preview, nothing to buy.",
     image: EDITORIAL.street,
   },
 ];
