@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { CloseIcon, HelpIcon, MenuIcon } from "./icons";
+import { ArrowIcon, CloseIcon, HelpIcon, MenuIcon } from "./icons";
+import { Logo } from "./logo";
 import { StartCheckButton } from "./start-check-button";
 import { ThemeToggle } from "./theme-toggle";
 
@@ -54,59 +55,68 @@ export function SiteHeader({ variant = "site" }: { variant?: "site" | "workflow"
 
   return (
     <>
-    <header className="sticky top-0 z-40 border-b border-line bg-bg/95 backdrop-blur supports-[backdrop-filter]:bg-bg/85">
-      <div className="mx-auto flex h-14 max-w-[1320px] items-center justify-between gap-3 px-4 sm:h-16 sm:px-6 lg:px-10">
-        <Link href="/" className="font-display text-[1.15rem] font-bold tracking-tight sm:text-xl" aria-label="WearCheck home">
-          WearCheck
-        </Link>
+      <header className="sticky top-0 z-40 border-b border-line bg-bg/95 backdrop-blur supports-[backdrop-filter]:bg-bg/85">
+        <div className="wrap flex h-16 items-center justify-between gap-3 sm:h-[4.5rem]">
+          <Link href="/" aria-label="WearCheck home" className="-ml-1 p-1">
+            <Logo />
+          </Link>
 
-        <nav aria-label="Main" className="hidden items-center gap-7 md:flex">
-          {NAV.map((n) => (
-            <Link key={n.href} href={n.href} className="text-sm text-ink-2 underline-offset-4 hover:text-ink hover:underline" aria-current={pathname === n.href ? "page" : undefined}>
-              {n.label}
-            </Link>
-          ))}
-        </nav>
-
-        <div className="flex items-center gap-1">
-          {variant === "workflow" ? (
-            <Link href="/help" className="inline-flex size-11 items-center justify-center hover:bg-sunk md:hidden" aria-label="How it works and photo help">
-              <HelpIcon />
-            </Link>
-          ) : null}
-          <ThemeToggle />
-          {variant === "site" ? (
-            <div className="ml-2 hidden md:block">
-              <StartCheckButton className="btn btn-primary min-h-10 px-4 text-sm">Check my outfit</StartCheckButton>
-            </div>
-          ) : null}
-          <button
-            ref={buttonRef}
-            type="button"
-            className="inline-flex size-11 items-center justify-center hover:bg-sunk md:hidden"
-            aria-label={open ? "Close menu" : "Open menu"}
-            aria-expanded={open}
-            aria-controls="mobile-menu"
-            onClick={() => setOpen((o) => !o)}
-          >
-            {open ? <CloseIcon /> : <MenuIcon />}
-          </button>
-        </div>
-      </div>
-    </header>
-
-      {/* Rendered outside <header>: its backdrop-filter would otherwise trap this fixed panel. */}
-      {open ? (
-        <div id="mobile-menu" ref={panelRef} className="fixed inset-x-0 top-14 bottom-0 z-50 overflow-y-auto bg-bg md:hidden" role="dialog" aria-modal="true" aria-label="Menu">
-          <nav aria-label="Mobile" className="flex flex-col px-4 py-4">
+          <nav aria-label="Main" className="hidden items-center gap-8 md:flex">
             {NAV.map((n) => (
-              <Link key={n.href} href={n.href} onClick={() => setOpen(false)} className="border-b border-line py-4 font-display text-2xl font-semibold">
+              <Link
+                key={n.href}
+                href={n.href}
+                className="text-[0.95rem] text-ink-2 underline-offset-[6px] hover:text-ink hover:underline aria-[current=page]:text-ink aria-[current=page]:underline"
+                aria-current={pathname === n.href ? "page" : undefined}
+              >
                 {n.label}
               </Link>
             ))}
-            <div className="mt-8">
-              <StartCheckButton className="btn btn-primary w-full">Check my outfit</StartCheckButton>
+          </nav>
+
+          <div className="flex items-center gap-1">
+            {variant === "workflow" ? (
+              <Link href="/help" className="inline-flex size-11 items-center justify-center hover:bg-sunk md:hidden" aria-label="Photo guide and help">
+                <HelpIcon />
+              </Link>
+            ) : null}
+            <ThemeToggle />
+            {variant === "site" ? (
+              <div className="ml-3 hidden md:block">
+                <StartCheckButton className="btn btn-primary btn-sm">Check my outfit</StartCheckButton>
+              </div>
+            ) : null}
+            <button
+              ref={buttonRef}
+              type="button"
+              className="inline-flex size-11 items-center justify-center hover:bg-sunk md:hidden"
+              aria-label={open ? "Close menu" : "Open menu"}
+              aria-expanded={open}
+              aria-controls="mobile-menu"
+              onClick={() => setOpen((o) => !o)}
+            >
+              {open ? <CloseIcon /> : <MenuIcon />}
+            </button>
+          </div>
+        </div>
+      </header>
+
+      {/* Rendered outside <header>: its backdrop-filter would otherwise trap this fixed panel. */}
+      {open ? (
+        <div id="mobile-menu" ref={panelRef} className="fixed inset-x-0 top-16 bottom-0 z-50 overflow-y-auto bg-bg md:hidden" role="dialog" aria-modal="true" aria-label="Menu">
+          <nav aria-label="Mobile" className="wrap flex flex-col pt-4 pb-10">
+            {NAV.map((n, i) => (
+              <Link key={n.href} href={n.href} onClick={() => setOpen(false)} className="flex items-baseline justify-between border-b border-line py-5 font-display text-[2rem] font-semibold tracking-[-0.03em]">
+                {n.label}
+                <span className="text-sm font-normal text-muted">0{i + 1}</span>
+              </Link>
+            ))}
+            <div className="mt-10">
+              <StartCheckButton className="btn btn-primary w-full">
+                Check my outfit <ArrowIcon className="nudge size-4" />
+              </StartCheckButton>
             </div>
+            <p className="mt-5 text-sm text-muted">No account needed. Your check is kept privately for 24 hours.</p>
           </nav>
         </div>
       ) : null}
