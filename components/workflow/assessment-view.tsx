@@ -4,16 +4,26 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ClientApiError } from "@/lib/client";
-import { COLOUR_FAMILIES, COLOUR_LABEL, FOOTWEAR_LABEL, FOOTWEAR_STYLES, type AssessmentResult, type ColourFamily, type Finding, type FootwearStyle, type UserCorrections } from "@/lib/schemas";
+import { COLOUR_FAMILIES, COLOUR_LABEL, FOOTWEAR_LABEL, FOOTWEAR_STYLES, type AssessmentResult, type CheckLine, type ColourFamily, type Finding, type FootwearStyle, type RowStatus, type UserCorrections } from "@/lib/schemas";
 import { CheckIcon, ChevronIcon } from "../icons";
 
+// Green is reserved for "checked and compatible"; nothing-to-check and not-enough-information are neutral.
 const BADGE: Record<AssessmentResult["status"], { cls: string }> = {
   compatible: { cls: "bg-ok" },
   consider_change: { cls: "bg-warn" },
   conflict: { cls: "bg-bad" },
   insufficient: { cls: "bg-line-strong" },
+  no_requirements: { cls: "bg-line-strong" },
 };
-const ROW_LABEL = { no_issue: "No clear issue", needs_look: "Needs a look", conflict: "Conflicts with a stated rule", cant_assess: "Can't assess" } as const;
+const ROW_LABEL: Record<RowStatus, string> = {
+  no_issue: "No clear issue", needs_look: "Needs a look", conflict: "Conflicts with a stated rule", cant_assess: "Can't assess",
+  not_checked: "Not checked — not visible", not_required: "Nothing to check",
+};
+const CHECK_LABEL: Record<CheckLine["result"], { text: string; cls: string }> = {
+  ok: { text: "Checked · fits", cls: "bg-ok" },
+  issue: { text: "Checked · issue", cls: "bg-bad" },
+  not_checked: { text: "Not checked", cls: "bg-line-strong" },
+};
 const KIND_LABEL: Record<Finding["kind"], string> = {
   explicit_rule: "Event rule",
   explicit_preference: "Event recommendation",
@@ -139,10 +149,12 @@ export function AssessmentView(p: Props) {
   const secondary = res.findings.filter((f) => f.id !== key?.id && f.status !== "ok").slice(0, 4);
   const canPreview = Boolean(res.primary_action);
   // Other findings that can also be previewed (e.g. the shoes, when the key finding is a garment).
-  const alsoPreviewable = res.status === "insufficient" ? [] : res.findings.filter((f) => f.id !== key?.id && (f.status === "conflict" || f.status === "consider_change") && f.render_category && (f.user_action === "preview_shoes" || f.user_action === "preview_garment"));
+  const alsoPreviewable = res.status === "insufficient" || res.status === "no_requirements" ? [] : res.findings.filter((f) => f.id !== key?.id && (f.status === "conflict" || f.status === "consider_change") && f.render_category && (f.user_action === "preview_shoes" || f.user_action === "preview_garment"));
   const compatible = res.status === "compatible";
+  const noReqs = res.status === "no_requirements";
+  const needsPhoto = Boolean(res.photo_request) && (res.status === "insufficient" || noReqs);
   // Shoes that already fit can still be previewed, clearly labelled as optional.
-  const optionalShoes = !compatible && res.status !== "insufficient" && res.shoes_assessable && key?.render_category !== "shoes" && !alsoPreviewable.some((f) => f.render_category === "shoes")
+  const optionalShoes = !compatible && !noReqs && res.status !== "insufficient" && res.shoes_assessable && key?.render_category !== "shoes" && !alsoPreviewable.some((f) => f.render_category === "shoes")
     ? res.findings.find((f) => f.area === "shoes_venue" && f.status === "ok") ?? null : null;
 
   return (
@@ -157,10 +169,35 @@ export function AssessmentView(p: Props) {
           <p className="eyebrow plain">Step 3 · {p.eventLabel}</p>
           <p className="mt-4 inline-flex items-center gap-2.5 bg-raised px-3 py-2 text-[0.95rem] font-semibold"><span aria-hidden className={`size-2.5 rounded-full ${BADGE[res.status].cls}`} />{res.headline}</p>
           <h1 ref={headingRef} tabIndex={-1} className="t-2 mt-5 outline-none">
-            {key ? key.observation : compatible ? "Nothing in your confirmed requirements conflicts with this outfit." : "We need a bit more information."}
+            {noReqs ? "We didn't assess this outfit: no requirements were given."
+              : key ? key.observation : compatible ? "Nothing you confirmed conflicts with this outfit." : "We need a bit more information."}
           </h1>
-          {key ? <p className="lede mt-4">{key.reason}</p> : null}
-          {compatible ? <p className="mt-3 text-ink-2">This isn&rsquo;t approval from your host — it means we found no conflict with what you confirmed.</p> : null}
+          {noReqs ? <p className="lede mt-4">WearCheck compares an outfit with what the invitation or host asks for. Add the dress code, colours to avoid or footwear notes, and we&rsquo;ll check them.</p>
+            : key ? <p className="lede mt-4">{key.reason}</p> : null}
+          {compatible ? <p className="mt-3 text-ink-2">This isn&rsquo;t approval from your host — it means the requirements listed below were checked and nothing conflicts.</p> : null}
+
+          {needsPhoto ? (
+            <div className="mt-6 border-l-2 border-warn bg-raised p-4" role="note">
+              <p className="font-semibold">{noReqs ? "Your photo also shows only part of your outfit." : "A different photo would help."}</p>
+              <p className="mt-1 text-[0.95rem] text-ink-2">{res.photo_request}</p>
+            </div>
+          ) : null}
+
+          {res.checks?.length ? (
+            <section className="mt-6" aria-labelledby="h-checked">
+              <h2 id="h-checked" className="text-[0.875rem] font-semibold uppercase tracking-[0.06em] text-ink-2">What we checked</h2>
+              <ul className="mt-2 divide-y divide-line border-y border-line">
+                {res.checks.map((c, i) => (
+                  <li key={i} className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1 py-3 text-[0.95rem]">
+                    <span className="min-w-0 font-medium">“{c.label}” <span className="font-normal text-muted">· {SOURCE_LABEL[c.source]}</span></span>
+                    <span className="inline-flex items-center gap-1.5 justify-self-end whitespace-nowrap text-[0.875rem] font-semibold"><span aria-hidden className={`size-2 rounded-full ${CHECK_LABEL[c.result].cls}`} />{CHECK_LABEL[c.result].text}</span>
+                    <span className="col-span-2 text-ink-2">{c.note}</span>
+                  </li>
+                ))}
+              </ul>
+              {!res.shoes_assessable ? <p className="mt-2 text-[0.9rem] text-muted">Shoes weren&rsquo;t visible, so nothing about them was checked.</p> : null}
+            </section>
+          ) : null}
 
           {key ? (
             <div className="mt-4">
@@ -203,7 +240,18 @@ export function AssessmentView(p: Props) {
           {error ? <p role="alert" className="mt-4 border-l-2 border-bad pl-3 font-medium">{error.message}</p> : null}
 
           <div className="mt-10 flex flex-col gap-3 border-t border-line pt-8 sm:flex-row sm:flex-wrap">
-            {canPreview ? (
+            {noReqs ? (
+              <>
+                <Link href={`/check/${p.checkId}/requirements`} className="btn btn-primary">Add the event&rsquo;s requirements</Link>
+                {needsPhoto ? <Link href={`/check/${p.checkId}/outfit`} className="btn btn-secondary">Use a full-length photo</Link> : null}
+                <button type="button" className="btn btn-quiet" onClick={decideKeep} disabled={busy}>Save without a check</button>
+              </>
+            ) : needsPhoto && !canPreview && !res.clarification ? (
+              <>
+                <Link href={`/check/${p.checkId}/outfit`} className="btn btn-primary">Use a different photo</Link>
+                <button type="button" className="btn btn-quiet" onClick={decideKeep} disabled={busy}>Keep this outfit anyway</button>
+              </>
+            ) : canPreview ? (
               <>
                 <Link href={`/check/${p.checkId}/options`} className="btn btn-primary">Preview the smallest change</Link>
                 <button type="button" className="btn btn-secondary" onClick={decideKeep} disabled={busy}>Keep this outfit</button>
@@ -211,7 +259,7 @@ export function AssessmentView(p: Props) {
             ) : compatible ? (
               <>
                 <button type="button" className="btn btn-primary" onClick={decideKeep} disabled={busy}>Save my outfit check</button>
-                <Link href={`/check/${p.checkId}/options?explore=1`} className="btn btn-quiet">Explore alternatives (optional)</Link>
+                <Link href={`/check/${p.checkId}/options?explore=1`} className="btn btn-quiet">Explore a change (optional)</Link>
               </>
             ) : (
               <button type="button" className="btn btn-secondary" onClick={decideKeep} disabled={busy || Boolean(res.clarification)}>Keep this outfit</button>
