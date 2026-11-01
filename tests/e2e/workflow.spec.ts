@@ -77,7 +77,7 @@ test.describe("guest workflow (no provider calls)", () => {
   test("unsupported and unreadable uploads fall back to manual entry", async ({ page }) => {
     await startCheck(page);
     await page.locator('input[aria-label="Choose invitation image"]').setInputFiles({ name: "invite.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4") });
-    await expect(page.getByRole("alert")).toContainText(/PDF/);
+    await expect(page.getByRole("alert").filter({ hasText: /PDF/ })).toBeVisible();
     await expect(page.getByRole("button", { name: "Enter the details instead" })).toBeVisible();
   });
 });
@@ -106,12 +106,21 @@ test.describe("live pipeline @live", () => {
     }
   });
 
-  test("invitation image upload is read by the vision model", async ({ page }) => {
-    test.skip(!existsSync(INVITATION) || statSync(INVITATION).size === 0, "Set E2E_INVITATION");
+});
+
+test.describe("live invitation reading @live", () => {
+  test.skip(!LIVE || !existsSync(INVITATION) || statSync(INVITATION).size === 0, "Set E2E_LIVE=1 and E2E_INVITATION (tests/fixtures/sample-invitation.png works)");
+
+  test("invitation image upload is read by the vision model and quoted", async ({ page }) => {
     await startCheck(page);
     await page.locator('input[aria-label="Choose invitation image"]').setInputFiles(INVITATION);
     await page.getByRole("button", { name: "Continue" }).first().click();
     await page.waitForURL(/\/requirements$/, { timeout: 90_000 });
     await expect(page.getByText("From invitation").first()).toBeVisible();
+    if (INVITATION.endsWith("sample-invitation.png")) {
+      // The fixture states both rules explicitly; they must survive extraction as invitation-sourced.
+      await expect(page.getByText(/white or ivory/i).first()).toBeVisible();
+      await expect(page.getByText(/flats or wedges/i).first()).toBeVisible();
+    }
   });
 });
