@@ -39,8 +39,8 @@ export default async function CheckIdLayout({ children, params }: { children: Re
   return (
     <>
       <WorkflowProgress />
-      <main id="main" className="wrap pb-32 pt-6 lg:grid lg:grid-cols-[17rem_minmax(0,1fr)] lg:gap-14 lg:pt-10">
-        <aside className="mb-6 hidden lg:block" aria-label="Event context">
+      <main id="main" className="wrap pb-32 pt-6 lg:pt-10 xl:grid xl:grid-cols-[15rem_minmax(0,1fr)] xl:gap-12">
+        <aside className="mb-6 hidden xl:block" aria-label="Event context">
           <div className="sticky top-28 space-y-6 text-[0.95rem]">
             <div className="bg-raised p-5">
               <p className="eyebrow plain">Your occasion</p>
@@ -63,7 +63,7 @@ export default async function CheckIdLayout({ children, params }: { children: Re
           </div>
         </aside>
         <div className="min-w-0">
-          <div className="mb-4 lg:hidden"><CheckMenu checkId={check.id} compact /></div>
+          <div className="mb-4 xl:hidden"><CheckMenu checkId={check.id} compact /></div>
           {children}
         </div>
       </main>
