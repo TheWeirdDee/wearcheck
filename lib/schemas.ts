@@ -168,6 +168,8 @@ export type OutfitObservation = z.infer<typeof OutfitObservation>;
 // User answers to targeted clarification questions override model observations.
 export const UserCorrections = z.object({
   main_garment_colour: ColourFamily.optional(),
+  /** Per-garment colour answers, keyed by the observed item ("item0", "item1", ...). */
+  garment_colours: z.record(z.string().regex(/^item\d{1,2}$/), ColourFamily).optional(),
   footwear_style: FootwearStyle.optional(),
   rule_answers: z.record(z.string().max(32), z.enum(["applies", "does_not_apply"])).optional(),
 });
@@ -209,7 +211,7 @@ export type Finding = {
 };
 
 export type Clarification = {
-  id: "main_garment_colour" | "footwear_style" | `rule:${string}`;
+  id: "main_garment_colour" | "footwear_style" | `rule:${string}` | `colour:${string}`;
   question: string;
   options: { value: string; label: string }[];
 };
