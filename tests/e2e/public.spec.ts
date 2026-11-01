@@ -78,6 +78,36 @@ test.describe("public pages", () => {
     await expect(page.getByRole("button", { name: "Open menu" })).toBeFocused();
   });
 
+  test("comparison (recorded outputs, no provider call): whole frame on screen, toggles, slider and zoom work", async ({ page }) => {
+    await page.goto("/demo");
+    const frame = page.getByTestId("compare-frame").first();
+    await frame.scrollIntoViewIfNeeded();
+    await frame.evaluate((el) => el.scrollIntoView({ block: "center" }));
+    const box = await frame.boundingBox();
+    const vh = page.viewportSize()!.height;
+    expect(box!.height).toBeLessThanOrEqual(vh); // the full-length photo fits, feet included
+    expect(box!.width).toBeGreaterThan(200);
+    const group = page.getByRole("group", { name: "Comparison view" }).first();
+    await group.getByRole("button", { name: "Original" }).click();
+    await expect(group.getByRole("button", { name: "Original" })).toHaveAttribute("aria-pressed", "true");
+    await expect(frame.locator('img[alt="Original outfit photo"]')).toBeVisible();
+    await group.getByRole("button", { name: "AI preview" }).click();
+    await expect(frame.locator('img[alt^="AI-generated preview"]')).toBeVisible();
+    await group.getByRole("button", { name: "Compare" }).click();
+    const slider = frame.getByRole("slider");
+    await slider.focus();
+    await page.keyboard.press("Home");
+    await expect(slider).toHaveValue("0");
+    await page.keyboard.press("End");
+    await expect(slider).toHaveValue("100");
+    const zoom = page.getByRole("button", { name: "Zoom to the change" }).first();
+    await expect(zoom).toBeEnabled({ timeout: 10_000 });
+    await zoom.click();
+    await expect(frame.locator("img").first()).toHaveAttribute("style", /scale\(/);
+    const tap = await zoom.boundingBox();
+    expect(tap!.height).toBeGreaterThanOrEqual(44); // usable touch target on mobile
+  });
+
   test("private routes are not indexable", async ({ request }) => {
     const robots = await (await request.get("/robots.txt")).text();
     expect(robots).toMatch(/Disallow: \/check\//);
