@@ -4,53 +4,64 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
+import { CATEGORY_META } from "@/lib/categories";
 import { api, ClientApiError, prepareImage } from "@/lib/client";
 import type { RenderCategory } from "@/lib/schemas";
 
 export type OptionItem = {
   id: string; title: string; category: RenderCategory; file: string; tags: string[];
   creator: string; licence: string; licence_url: string; source_name: string; source_url: string;
+  /** Why this item is offered, from the confirmed requirements and the visible garment. */
+  reasons: string[];
 };
-
-const CAT_LABEL: Record<RenderCategory, string> = { shoes: "Shoes", full_body: "Dress / full outfit", upper_body: "Top", outer: "Outerwear" };
 
 type Props = {
   checkId: string;
-  findingId: string;
-  heading: string;
-  reason: string;
+  /** The finding this change addresses, or null for an optional change. */
+  findingId: string | null;
+  category: RenderCategory;
+  why: string;
   photoUrl: string;
   items: OptionItem[];
-  allowedCategories: RenderCategory[];
-  shoesAssessable: boolean;
-  explore: boolean;
+  /** All reference items in this category, before filtering by requirements. */
+  catalogueTotal: number;
+  changeCategoryHref: string | null;
 };
 
+type Selected = { kind: "item"; item: OptionItem } | { kind: "user"; assetId: string; url: string };
+
+/**
+ * One change, chosen deliberately: what is being replaced, by what, and why — then YouCam generates it.
+ * Two first-class paths: an item the person owns or is considering, or a licensed reference item.
+ */
 export function OptionsView(p: Props) {
   const router = useRouter();
-  const [selected, setSelected] = useState<{ kind: "item"; item: OptionItem } | { kind: "user"; assetId: string; url: string; category: RenderCategory } | null>(null);
+  const meta = CATEGORY_META[p.category];
+  const [selected, setSelected] = useState<Selected | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [byo, setByo] = useState<{ category: RenderCategory | ""; rights: boolean; uploading: boolean }>({ category: p.allowedCategories.length === 1 ? p.allowedCategories[0] : "", rights: false, uploading: false });
+  const [rights, setRights] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const inFlight = useRef(false);
 
   async function uploadOwn(f: File | undefined) {
-    if (!f || !byo.category) return;
+    if (!f) return;
     setError(null);
-    setByo((b) => ({ ...b, uploading: true }));
+    setUploading(true);
     try {
       const prep = await prepareImage(f, 2048);
       const fd = new FormData();
       fd.append("file", prep.blob, "reference.jpg");
-      fd.append("category", byo.category);
-      fd.append("rights", byo.rights ? "accepted" : "");
-      const r = await api<{ assetId: string; url: string; category: RenderCategory }>(`/api/checks/${p.checkId}/reference`, { method: "POST", body: fd });
-      setSelected({ kind: "user", assetId: r.assetId, url: r.url, category: r.category });
+      fd.append("category", p.category);
+      fd.append("rights", rights ? "accepted" : "");
+      const r = await api<{ assetId: string; url: string }>(`/api/checks/${p.checkId}/reference`, { method: "POST", body: fd });
+      setSelected({ kind: "user", assetId: r.assetId, url: r.url });
     } catch (e) {
       setError(e instanceof ClientApiError ? e.body.message : (e as Error).message);
     } finally {
-      setByo((b) => ({ ...b, uploading: false }));
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = "";
     }
   }
 
@@ -59,14 +70,13 @@ export function OptionsView(p: Props) {
     inFlight.current = true;
     setBusy(true);
     setError(null);
-    const category = selected.kind === "item" ? selected.item.category : selected.category;
     try {
       const r = await api<{ jobId: string }>("/api/render-jobs", {
         method: "POST",
         body: JSON.stringify({
           checkId: p.checkId,
-          findingId: p.explore ? `voluntary:${category}` : p.findingId,
-          ...(selected.kind === "item" ? { itemId: selected.item.id } : { userAssetId: selected.assetId, userCategory: selected.category }),
+          findingId: p.findingId ?? `voluntary:${p.category}`,
+          ...(selected.kind === "item" ? { itemId: selected.item.id } : { userAssetId: selected.assetId, userCategory: p.category }),
         }),
       });
       router.push(`/check/${p.checkId}/preview?job=${r.jobId}`);
@@ -77,96 +87,115 @@ export function OptionsView(p: Props) {
     }
   }
 
-  return (
-    <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_18rem] lg:gap-10">
-      <div className="min-w-0">
-        <div className="flex items-start gap-4">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={`${p.photoUrl}?size=thumb`} alt="Your original outfit" className="hidden w-24 bg-photo object-cover sm:block" />
-          <div>
-            <p className="eyebrow plain">Step 3 · Choose one alternative</p>
-            <h1 className="t-2 mt-3">{p.heading}</h1>
-            <p className="lede mt-4">{p.reason}</p>
-          </div>
-        </div>
+  const selectedTitle = selected ? (selected.kind === "item" ? selected.item.title : "Your item (provided by you)") : null;
 
+  return (
+    <div className="pb-48">
+      <p className="eyebrow plain">Step 3 · {p.findingId ? "Choose one change" : "Optional change"}</p>
+      <h1 className="t-2 mt-3">Change the {meta.noun}</h1>
+      <div className="mt-5 grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        <div className="bg-raised p-4">
+          <p className="text-[0.8125rem] font-semibold uppercase tracking-[0.06em] text-ink-2">Why this change</p>
+          <p className="mt-1">{p.why}</p>
+        </div>
+        <div className="bg-raised p-4">
+          <p className="text-[0.8125rem] font-semibold uppercase tracking-[0.06em] text-ink-2">What gets replaced</p>
+          <p className="mt-1">{meta.replaces}</p>
+          <p className="mt-1 text-[0.9rem] text-ink-2">{meta.plain}</p>
+        </div>
+      </div>
+      {p.changeCategoryHref ? <Link href={p.changeCategoryHref} className="btn btn-quiet mt-2 text-[0.95rem]">Change something else instead</Link> : null}
+
+      {/* Path 1: the person's own item */}
+      <section className="mt-10 border border-line-strong p-5 sm:p-6" aria-labelledby="h-own">
+        <h2 id="h-own" className="t-3">Try an item you own or are considering</h2>
+        <p className="mt-2 max-w-[60ch] text-ink-2">A clear, front-facing photo of one {p.category === "shoes" ? "pair of shoes" : "garment"} on a plain background, or a product photo. It&rsquo;s marked &ldquo;Provided by you&rdquo; and stays private to this check.</p>
+        <label className="mt-4 flex cursor-pointer items-start gap-3 text-[0.95rem]">
+          <input type="checkbox" className="mt-0.5 size-5 accent-[var(--ink)]" checked={rights} onChange={(e) => setRights(e.target.checked)} />
+          I own this image or have permission to use it, and it shows no one other than a consenting adult.
+        </label>
+        <div className="mt-4 flex flex-wrap items-center gap-4">
+          <button type="button" className="btn btn-secondary" disabled={!rights || uploading} onClick={() => fileRef.current?.click()}>
+            {uploading ? "Uploading…" : `Upload a photo of the ${p.category === "shoes" ? "shoes" : "item"}`}
+          </button>
+          {selected?.kind === "user" ? (
+            <span className="inline-flex items-center gap-3 text-[0.95rem] font-semibold">
+              {/* eslint-disable-next-line @next/next/no-img-element -- private, owner-only media route */}
+              <img src={selected.url} alt="Your uploaded item" className="size-16 bg-bg object-contain" />
+              Selected: your item
+            </span>
+          ) : null}
+        </div>
+        <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" aria-label="Upload your own reference item" onChange={(e) => uploadOwn(e.target.files?.[0])} />
+      </section>
+
+      {/* Path 2: licensed reference items, ranked with reasons */}
+      <section className="mt-10" aria-labelledby="h-ref">
+        <h2 id="h-ref" className="t-3">Or pick a reference item</h2>
+        <p className="mt-2 max-w-[68ch] text-ink-2" data-testid="catalogue-note">
+          {p.catalogueTotal === 0
+            ? "WearCheck has no reference items for this category. Upload your own item above."
+            : p.items.length === 0
+              ? `None of WearCheck's ${p.catalogueTotal} reference ${p.catalogueTotal === 1 ? "item" : "items"} for this category meets your confirmed requirements, so none is offered. Upload your own item above — WearCheck can't confirm it meets the rule either.`
+              : `WearCheck has ${p.catalogueTotal} licensed reference ${p.catalogueTotal === 1 ? "photo" : "photos"} for this category; ${p.items.length === p.catalogueTotal ? "all" : p.items.length} ${p.items.length === 1 ? "fits" : "fit"} your confirmed requirements, ranked below. It's a small demo set of examples — not products, stock or personal recommendations.`}
+        </p>
         {p.items.length ? (
-          <ul className="mt-10 grid grid-cols-[repeat(auto-fill,minmax(min(100%,15rem),1fr))] gap-x-6 gap-y-10" data-testid="catalogue">
-            {p.items.map((it) => {
+          <ul className="mt-6 grid grid-cols-[repeat(auto-fill,minmax(min(100%,17rem),1fr))] gap-x-6 gap-y-10" data-testid="catalogue">
+            {p.items.map((it, i) => {
               const on = selected?.kind === "item" && selected.item.id === it.id;
               return (
-                <li key={it.id} className={`flex min-w-0 flex-col outline-offset-4 ${on ? "outline-2 outline-ink" : ""}`}>
+                <li key={it.id} className={`flex min-w-0 flex-col p-3 ${on ? "outline-2 outline-ink" : "outline outline-1 outline-line"}`}>
                   <div className="relative aspect-[5/4] bg-raised">
-                    <Image src={`/reference/${it.file}`} alt={it.title} fill sizes="(min-width: 1024px) 26vw, (min-width: 640px) 44vw, 92vw" className="object-contain p-3" />
+                    <Image src={`/reference/${it.file}`} alt={it.title} fill sizes="(min-width: 1024px) 24vw, (min-width: 640px) 44vw, 92vw" className="object-contain p-3" />
+                    {i === 0 && p.items.length > 1 ? <span className="absolute left-2 top-2 bg-ink px-2 py-0.5 text-[0.75rem] font-semibold text-bg">Best fit for your requirements</span> : null}
                   </div>
                   <div className="flex flex-1 flex-col pt-4">
-                    <p className="eyebrow plain">{CAT_LABEL[it.category]}</p>
-                    <h2 className="mt-2 font-display text-lg font-semibold leading-snug">{it.title}</h2>
-                    <div className="mt-2 flex flex-wrap gap-1.5">{it.tags.map((t) => <span key={t} className="chip">{t}</span>)}</div>
-                    <p className="mt-3 text-[0.875rem] font-medium text-ink-2">Visual reference — not a live shopping listing.</p>
-                    <p className="photo-credit mt-1">
-                      Image: {it.creator}, <a href={it.licence_url} target="_blank" rel="license noopener noreferrer" className="underline">{it.licence}</a> ·{" "}
+                    <h3 className="font-display text-lg font-semibold leading-snug">{it.title}</h3>
+                    <p className="mt-3 text-[0.8125rem] font-semibold uppercase tracking-[0.06em] text-ink-2">Why it&rsquo;s offered</p>
+                    <ul className="mt-1 list-disc space-y-1 pl-5 text-[0.95rem]" data-testid="reasons">{it.reasons.map((r) => <li key={r}>{r}</li>)}</ul>
+                    <div className="mt-3 flex flex-wrap gap-1.5">{it.tags.map((t) => <span key={t} className="chip">{t}</span>)}</div>
+                    <p className="photo-credit mt-3">
+                      Visual reference, not a shopping listing. Image: {it.creator}, <a href={it.licence_url} target="_blank" rel="license noopener noreferrer" className="underline">{it.licence}</a> ·{" "}
                       <a href={it.source_url} target="_blank" rel="noopener noreferrer" className="underline">source</a>
                     </p>
-                    <button type="button" className={`btn btn-sm mt-auto ${on ? "btn-primary" : "btn-secondary"}`} aria-pressed={on} onClick={() => setSelected({ kind: "item", item: it })}>
-                      {on ? "Selected" : "Try this"}
+                    <button type="button" className={`btn btn-sm mt-4 ${on ? "btn-primary" : "btn-secondary"}`} aria-pressed={on} onClick={() => setSelected({ kind: "item", item: it })}>
+                      {on ? "Selected" : "Select this item"}
                     </button>
                   </div>
                 </li>
               );
             })}
           </ul>
-        ) : (
-          <p className="mt-8 bg-raised p-5 text-ink-2">None of our licensed reference items is known to meet this requirement without breaking another of your rules, so we won&rsquo;t suggest one. You can try your own item below — WearCheck can&rsquo;t confirm that it meets the rule either.</p>
-        )}
+        ) : null}
+      </section>
 
-        <section className="mt-16 border-t border-line pt-8" aria-labelledby="h-byo">
-          <h2 id="h-byo" className="t-3">I have another item to try</h2>
-          <p className="mt-2 text-ink-2">A clear, front-facing photo of one item on a plain background (or worn by one person). It will be marked “Provided by you”.</p>
-          <div className="mt-4 grid gap-4 sm:grid-cols-2">
-            <label className="block"><span className="label">What kind of item?</span>
-              <select className="field" value={byo.category} onChange={(e) => setByo({ ...byo, category: e.target.value as RenderCategory })}>
-                <option value="">Choose…</option>
-                {p.allowedCategories.map((c) => <option key={c} value={c} disabled={c === "shoes" && !p.shoesAssessable}>{CAT_LABEL[c]}{c === "shoes" && !p.shoesAssessable ? " (feet not visible)" : ""}</option>)}
-              </select>
-            </label>
+      {/* What will be generated: original → reference, what's replaced, by which API — then one primary action */}
+      <aside className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-bg/95 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur" aria-label="Your selection" data-testid="selection-bar">
+        <div className="wrap flex flex-wrap items-center gap-x-5 gap-y-3">
+          <div className="flex items-center gap-2">
+            <figure className="w-12 sm:w-16">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={`${p.photoUrl}?size=thumb`} alt="Your original photo" className="aspect-[4/5] w-full bg-photo object-contain" />
+            </figure>
+            <span aria-hidden className="text-xl text-muted">→</span>
+            <figure className="flex aspect-[4/5] w-12 items-center justify-center bg-raised sm:w-16">
+              {selected?.kind === "item" ? (
+                <Image src={`/reference/${selected.item.file}`} alt={`Selected: ${selected.item.title}`} width={64} height={80} className="h-full w-full object-contain p-0.5" />
+              ) : selected?.kind === "user" ? (
+                // eslint-disable-next-line @next/next/no-img-element -- private, owner-only media route
+                <img src={selected.url} alt="Selected: your item" className="h-full w-full object-contain" />
+              ) : <span className="text-[0.7rem] text-muted">none</span>}
+            </figure>
           </div>
-          <p className="mt-2 text-[0.9rem] text-muted">Trousers and skirts aren&rsquo;t offered: the preview engine needs a photo of them being worn, which we can&rsquo;t verify here.</p>
-          <label className="mt-5 flex cursor-pointer items-start gap-3 text-[0.95rem]">
-            <input type="checkbox" className="mt-0.5 size-5 accent-[var(--ink)]" checked={byo.rights} onChange={(e) => setByo({ ...byo, rights: e.target.checked })} />
-            I own this image or have permission to use it, and it shows no one other than a consenting adult.
-          </label>
-          <button type="button" className="btn btn-secondary btn-sm mt-5" disabled={!byo.category || !byo.rights || byo.uploading} onClick={() => fileRef.current?.click()}>
-            {byo.uploading ? "Uploading…" : "Upload my item"}
-          </button>
-          <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" aria-label="Upload your own reference item" onChange={(e) => uploadOwn(e.target.files?.[0])} />
-        </section>
-      </div>
-
-      {/* Selection summary: sticky sidebar on desktop, bottom bar on mobile */}
-      <aside className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-bg/95 px-[clamp(1rem,4vw,3.5rem)] pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur lg:static lg:mt-0 lg:border-0 lg:bg-transparent lg:p-0" aria-label="Selected item">
-        <div className="lg:sticky lg:top-28 lg:bg-raised lg:p-5">
-          <div className="flex items-center gap-3 lg:block">
-            {selected ? (
-              <div className="relative size-14 shrink-0 bg-bg lg:aspect-[4/5] lg:size-auto lg:w-full">
-                {selected.kind === "item" ? (
-                  <Image src={`/reference/${selected.item.file}`} alt="" fill sizes="300px" className="object-contain p-1" />
-                ) : (
-                  // eslint-disable-next-line @next/next/no-img-element -- private, owner-only media route
-                  <img src={selected.url} alt="" className="h-full w-full object-contain" />
-                )}
-              </div>
-            ) : null}
-            <div className="min-w-0 flex-1 lg:mt-3">
-              <p className="truncate font-semibold lg:whitespace-normal">{selected ? (selected.kind === "item" ? selected.item.title : "Provided by you") : "Choose an item"}</p>
-              <p className="text-[0.875rem] text-muted">The preview is AI-generated and isn&rsquo;t a fit guarantee.</p>
-            </div>
+          <div className="min-w-0 flex-1 basis-56">
+            <p className="truncate font-semibold">{selectedTitle ?? "Select an item, or upload your own"}</p>
+            <p className="text-[0.875rem] text-ink-2">Replaces your {meta.noun} · generated by YouCam {meta.provider}</p>
+            <p className="hidden truncate text-[0.875rem] text-muted md:block">Why: {p.why}</p>
           </div>
-          {error ? <p role="alert" className="mt-2 text-[0.95rem] font-medium text-bad">{error}</p> : null}
-          <button type="button" className="btn btn-primary mt-3 w-full" disabled={!selected || busy} onClick={generate} aria-busy={busy}>
+          {error ? <p role="alert" className="basis-full text-[0.95rem] font-medium text-bad sm:order-last">{error}</p> : null}
+          <button type="button" className="btn btn-primary w-full sm:w-auto" disabled={!selected || busy} onClick={generate} aria-busy={busy}>
             {busy ? "Starting preview…" : "Generate preview"}
           </button>
-          <Link href={`/check/${p.checkId}/assessment`} className="btn btn-quiet mt-1 hidden w-full text-[0.95rem] lg:inline-flex">Back to assessment</Link>
         </div>
       </aside>
     </div>
