@@ -28,7 +28,7 @@ export function Hero() {
             <Link href="#how-it-works" className="btn btn-secondary w-full sm:w-auto">See how it works</Link>
           </div>
           <p className="mt-7 max-w-[34rem] text-[0.95rem] text-muted">
-            No account. Your check is private and deleted after 24 hours. If nothing needs changing, that&rsquo;s the answer.
+            No account. Your check is private, locks after 24 hours and is deleted within the next day. If nothing needs changing, that&rsquo;s the answer.
           </p>
         </div>
 
