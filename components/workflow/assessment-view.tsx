@@ -174,6 +174,19 @@ export function AssessmentView(p: Props) {
           </h1>
           {noReqs ? <p className="lede mt-4">WearCheck compares an outfit with what the invitation or host asks for. Add the dress code, colours to avoid or footwear notes, and we&rsquo;ll check them.</p>
             : key ? <p className="lede mt-4">{key.reason}</p> : null}
+          {key ? (
+            <div className="mt-4">
+              <button type="button" className="inline-flex min-h-11 items-center gap-1 text-[0.95rem] font-semibold underline underline-offset-4" aria-expanded={why} onClick={() => setWhy((w) => !w)}>
+                Why? <ChevronIcon className={`size-4 transition ${why ? "rotate-180" : ""}`} />
+              </button>
+              {why ? (
+                <dl className="mt-2 space-y-2 border-l-2 border-ink pl-4 text-[0.95rem]">
+                  <div><dt className="inline font-semibold">Type: </dt><dd className="inline">{KIND_LABEL[key.kind]}</dd></div>
+                  <div><dt className="inline font-semibold">Source: </dt><dd className="inline">{SOURCE_LABEL[key.evidence_source]}</dd></div>
+                  {key.evidence_text ? <div><dt className="inline font-semibold">Exact text: </dt><dd className="inline italic">“{key.evidence_text}”</dd></div> : null}
+                  {key.uncertainty ? <div><dt className="inline font-semibold">Uncertainty: </dt><dd className="inline">{key.uncertainty}</dd></div> : null}
+                </dl>
+              ) : null}
           {compatible ? <p className="mt-3 text-ink-2">This isn&rsquo;t approval from your host — it means the requirements listed below were checked and nothing conflicts.</p> : null}
 
           {needsPhoto ? (
@@ -199,19 +212,6 @@ export function AssessmentView(p: Props) {
             </section>
           ) : null}
 
-          {key ? (
-            <div className="mt-4">
-              <button type="button" className="inline-flex min-h-11 items-center gap-1 text-[0.95rem] font-semibold underline underline-offset-4" aria-expanded={why} onClick={() => setWhy((w) => !w)}>
-                Why? <ChevronIcon className={`size-4 transition ${why ? "rotate-180" : ""}`} />
-              </button>
-              {why ? (
-                <dl className="mt-2 space-y-2 border-l-2 border-ink pl-4 text-[0.95rem]">
-                  <div><dt className="inline font-semibold">Type: </dt><dd className="inline">{KIND_LABEL[key.kind]}</dd></div>
-                  <div><dt className="inline font-semibold">Source: </dt><dd className="inline">{SOURCE_LABEL[key.evidence_source]}</dd></div>
-                  {key.evidence_text ? <div><dt className="inline font-semibold">Exact text: </dt><dd className="inline italic">“{key.evidence_text}”</dd></div> : null}
-                  {key.uncertainty ? <div><dt className="inline font-semibold">Uncertainty: </dt><dd className="inline">{key.uncertainty}</dd></div> : null}
-                </dl>
-              ) : null}
             </div>
           ) : null}
 
