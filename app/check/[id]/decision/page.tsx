@@ -3,7 +3,7 @@ import Link from "next/link";
 import { DownloadIcon } from "@/components/icons";
 import { StartCheckButton } from "@/components/start-check-button";
 import { requireOwnedCheck } from "@/lib/checks";
-import { CARD_DISCLAIMER, dressCodeSource, loadDecision, SOURCE_LABEL, unresolvedNote } from "@/lib/decision";
+import { CARD_DISCLAIMER, dressCodeSource, loadDecision, outcomeText, RECHECK_LABEL, SOURCE_LABEL, unresolvedNote } from "@/lib/decision";
 
 export const metadata: Metadata = { title: "Your outfit decision" };
 
@@ -25,12 +25,13 @@ export default async function DecisionPage({ params }: { params: Promise<{ id: s
   const original = `/api/media/${d.photoAssetId}`;
   const preview = d.job?.result_asset_id ? `/api/media/${d.job.result_asset_id}` : null;
   const cardUrl = `/api/checks/${check.id}/decision-card`;
+  const text = outcomeText(d);
 
   return (
     <div>
       <p className="eyebrow plain">Decision · {r.event_name ?? "Your occasion"}{r.event_date ? ` · ${r.event_date}` : ""}</p>
-      <h1 className="t-1 mt-4">{keep ? "Keep your outfit." : "Make this one change."}</h1>
-      <p className="lede mt-4 max-w-[44ch]">{keep ? (d.result.status === "compatible" ? "Nothing in the requirements you confirmed conflicts with it." : "You chose to keep what you have. The findings are summarised below.") : "You chose the previewed change. Compare it with your original before you commit."}</p>
+      <h1 className="t-1 mt-4">{text.title}</h1>
+      <p className="lede mt-4 max-w-[48ch]">{text.lede}</p>
 
       <div className="mt-10 grid gap-10 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] lg:gap-12">
         <div className={`grid items-start gap-3 ${preview ? "grid-cols-2" : "grid-cols-1"}`}>
@@ -51,14 +52,15 @@ export default async function DecisionPage({ params }: { params: Promise<{ id: s
         <div>
           <dl className="divide-y divide-line border-y border-line text-[0.975rem]">
             <div className="py-4"><dt className="text-[0.875rem] text-muted">Status</dt><dd className="mt-1 font-display text-lg font-semibold">{d.result.headline}</dd></div>
-            <div className="py-4"><dt className="text-[0.875rem] text-muted">Recommendation</dt><dd className="mt-1 text-base">{keep ? (d.result.status === "compatible" ? "No change needed." : "You chose to keep your outfit.") : kf ? kf.observation : "Use the previewed change."}{kf && !keep ? ` ${kf.reason}` : ""}</dd></div>
+            <div className="py-4"><dt className="text-[0.875rem] text-muted">Recommendation</dt><dd className="mt-1 text-base">{text.recommendation}</dd></div>
+            {!keep ? <div className="py-4"><dt className="text-[0.875rem] text-muted">Does the preview meet it?</dt><dd className="mt-1 font-semibold">{RECHECK_LABEL[d.recheck?.state ?? "none"]}</dd>{d.recheck ? <dd className="mt-1 text-[0.95rem] text-ink-2">{d.recheck.note}</dd> : null}</div> : null}
             {kf ? <div className="py-4"><dt className="text-[0.875rem] text-muted">Evidence</dt><dd className="mt-1">{kf.evidence_text ? `“${kf.evidence_text}” — ` : ""}{SOURCE_LABEL[kf.evidence_source]}</dd></div> : null}
             <div className="py-4"><dt className="text-[0.875rem] text-muted">Dress code source</dt><dd className="mt-1">{dressCodeSource(r)}</dd></div>
             {d.item ? (
               <div className="py-4"><dt className="text-[0.875rem] text-muted">Reference item</dt><dd className="mt-1">{d.item.title}<span className="block text-[0.8125rem] text-muted">{d.item.creator}, {d.item.licence} · Visual reference — not a live shopping listing.</span></dd></div>
             ) : d.userRefAssetId ? <div className="py-4"><dt className="text-[0.875rem] text-muted">Reference item</dt><dd className="mt-1">Provided by you</dd></div> : null}
           </dl>
-          {!keep && kf && unresolvedNote(kf, r) ? <p className="mt-4 border-l-2 border-warn pl-3 text-[0.95rem]">{unresolvedNote(kf, r)}</p> : null}
+          {!keep && kf && d.recheck?.state !== "appears_resolved" && unresolvedNote(kf, r) ? <p className="mt-4 border-l-2 border-warn pl-3 text-[0.95rem]">{unresolvedNote(kf, r)}</p> : null}
           <p className="mt-4 text-[0.9rem] text-muted">{CARD_DISCLAIMER}</p>
 
           <div className="mt-8 flex flex-col gap-3">
