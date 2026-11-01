@@ -187,6 +187,8 @@ export function AssessmentView(p: Props) {
                   {key.uncertainty ? <div><dt className="inline font-semibold">Uncertainty: </dt><dd className="inline">{key.uncertainty}</dd></div> : null}
                 </dl>
               ) : null}
+            </div>
+          ) : null}
           {compatible ? <p className="mt-3 text-ink-2">This isn&rsquo;t approval from your host — it means the requirements listed below were checked and nothing conflicts.</p> : null}
 
           {needsPhoto ? (
@@ -210,9 +212,6 @@ export function AssessmentView(p: Props) {
               </ul>
               {!res.shoes_assessable ? <p className="mt-2 text-[0.9rem] text-muted">Shoes weren&rsquo;t visible, so nothing about them was checked.</p> : null}
             </section>
-          ) : null}
-
-            </div>
           ) : null}
 
           {res.clarification ? (
