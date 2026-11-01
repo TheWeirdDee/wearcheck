@@ -1,0 +1,16 @@
+node_modules/
+.next/
+out/
+coverage/
+playwright-report/
+test-results/
+.env
+.env.local
+.env.*.local
+.vercel/
+private-ops/
+private-assets/
+*.log
+.DS_Store
+next-env.d.ts
+*.tsbuildinfo
