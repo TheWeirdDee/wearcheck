@@ -32,7 +32,7 @@ export default async function OptionsPage({ params, searchParams }: { params: Pr
   if (!explore && !key) {
     return (
       <div className="max-w-2xl">
-        <h1 className="text-3xl font-bold">No change to preview</h1>
+        <h1 className="t-2">No change to preview</h1>
         <p className="mt-3 text-ink-2">{res.clarification ? "Please answer the open question on your assessment first." : "Your assessment didn't identify a change we can preview from this photo."}</p>
         <Link href={`/check/${check.id}/assessment`} className="btn btn-primary mt-6">Back to assessment</Link>
       </div>
