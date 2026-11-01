@@ -4,8 +4,25 @@ import type { NextConfig } from "next";
 // so the live site can be checked against the pushed branch. Not secret.
 const commitHeader = { key: "X-WearCheck-Commit", value: process.env.WEARCHECK_COMMIT || "unknown" };
 
+// Defense in depth: everything is first-party. Next's inline bootstrap scripts need 'unsafe-inline'
+// (no nonce pipeline here); dev additionally needs 'unsafe-eval' for React debugging.
+const csp = [
+  "default-src 'self'",
+  `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""}`,
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob:",
+  "font-src 'self' data:",
+  "connect-src 'self'",
+  "media-src 'self' blob:",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+].join("; ");
+
 const securityHeaders = [
   commitHeader,
+  { key: "Content-Security-Policy", value: csp },
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   { key: "X-Frame-Options", value: "DENY" },
