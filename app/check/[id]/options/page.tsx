@@ -20,14 +20,17 @@ const HEADINGS: Record<RenderCategory, string> = {
   outer: "Let's add a different outer layer",
 };
 
-export default async function OptionsPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ explore?: string }> }) {
+export default async function OptionsPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ explore?: string; finding?: string }> }) {
   const check = await requireOwnedCheck((await params).id);
-  const explore = (await searchParams).explore === "1";
+  const sp = await searchParams;
+  const explore = sp.explore === "1";
   const [reqs, assessment, photo] = await Promise.all([currentRequirements(check), currentAssessment(check), photoAsset(check)]);
   if (!reqs || !photo) redirect(`/check/${check.id}/requirements`);
   if (!assessment) redirect(`/check/${check.id}/assessment`);
   const res = assessment.findings_json;
-  const key = res.findings.find((f) => f.id === res.primary_action?.finding_id) ?? null;
+  // A specific actionable finding (from "Also worth a look"), else the assessment's primary action.
+  const chosen = sp.finding ? res.findings.find((f) => f.id === sp.finding && f.render_category && (f.user_action === "preview_shoes" || f.user_action === "preview_garment") && (f.status === "conflict" || f.status === "consider_change")) : null;
+  const key = (res.status !== "insufficient" ? chosen : null) ?? res.findings.find((f) => f.id === res.primary_action?.finding_id) ?? null;
 
   if (!explore && !key) {
     return (
