@@ -23,14 +23,18 @@ What has and hasn't been demonstrated, kept deliberately separate. "Implemented"
 | Guest session, ownership checks, cross-browser denial, CSRF origin check | ✓ | ✓ | ✓ |
 | Manual event entry → requirements review → confirm (with revisions) | ✓ | ✓ | ✓ |
 | Invitation image → **real Gemini** extraction with exact quotes | ✓ | ✓ | ✓ (sample invitation fixture) |
-| Outfit photo → **real Gemini** observation → rule-based assessment → keep → decision card PNG | ✓ | ✓ on a CC0 editorial photo, for UI verification only | ✗ not yet run on the live URL |
+| Outfit photo → **real Gemini** observation → rule-based assessment → keep → decision card PNG | ✓ | ✓ | ✓ (permissioned owner photo, `live pipeline` e2e) |
 | Delete a check (database rows + stored files), and access revoked afterwards | ✓ | ✓ | ✓ (e2e) |
 | Scheduled retention cleanup endpoint (secret-protected) | ✓ | ✓ | ✓ (401 without the secret, 200 with it) |
-| **YouCam Clothes V4** render | ✓ | ✗ **not run** | ✗ |
-| **YouCam Shoes V3** render | ✓ | ✗ **not run** | ✗ |
-| Render refresh recovery, duplicate-submit protection, stale-revision handling | ✓ | Unit-level only | ✗ |
+| **YouCam Clothes V4** render, through the UI | ✓ | ✓ 2 runs, 2026-11-01, 21–23 s | ✓ 2026-11-01, 17 s |
+| **YouCam Shoes V3** render, through the UI | ✓ | ✓ 2026-11-01, 26 s | ✓ 2026-11-01, 17 s |
+| Reload mid-render resumes the same job, with no duplicate provider task | ✓ | ✓ | ✓ |
+| Stale-revision handling for renders | ✓ | Unit-level only | ✗ |
 
-**The YouCam renders have not been run.** They need a full-length photo of a consenting adult, and none has been provided. Running them on someone else's photo, or on editorial stock photography, would misrepresent consent and blur evidence, so the gap stays open. See [Remaining manual actions](#remaining-manual-actions).
+**YouCam evidence (2026-11-01).** Five real renders ran through the WearCheck UI, using the project owner's own photos with permission for private testing only: Shoes V3 locally and on the live URL, and Clothes V4 twice locally and once on the live URL. Each run went example → photo with consent → real Gemini findings → one reference item → Generate → page reload mid-task → completed image displayed in the comparison view.
+- Every job created exactly one provider task (`/s2s/v2.0/task/shoes-transfer` or `/s2s/v2.0/task/cloth-v4`, polled until `success`).
+- The balance went from 1,040 to 1,030 units: **2 units per render**, as documented.
+- Task IDs, timestamps and latencies are kept privately in the usage ledger and `private-ops/`. The photos and generated images are **not published**, because public-use permission has not been given.
 
 ---
 
@@ -100,6 +104,7 @@ Names only; values live in `.env.local` locally and in the Vercel project settin
 | `YOUCAM_API_BASE` | `https://yce-api-01.makeupar.com` |
 | `GEMINI_API_KEY` | Google AI Studio key (free tier) |
 | `GEMINI_MODEL` | `gemini-3.5-flash` (verified on the free tier; `gemini-2.5-flash` is closed to new keys) |
+| `GEMINI_FALLBACK_MODEL` | Optional; `gemini-3.1-flash-lite`, used only after a quota error on the primary |
 | `SUPABASE_URL` · `SUPABASE_SERVICE_ROLE_KEY` | Storage access (server only) |
 | `SUPABASE_DB_URL` | Transaction-pooler connection string (port 6543) for the `wearcheck` schema |
 | `SUPABASE_STORAGE_BUCKET` | `wearcheck-private` |
@@ -139,9 +144,11 @@ E2E_LIVE=1 E2E_PHOTO=<permissioned full-body photo> npx playwright test -g "live
 node scripts/screenshots.mjs <baseUrl> <outDir> <light|dark>                 # 320/390/768/1024/1440, overflow + console checks
 node scripts/youcam-proof.mjs cloth-v4 <photo> <reference> full_body        # records task id, latency, credits used
 node scripts/youcam-proof.mjs shoes-transfer <photo> <reference>
+node scripts/youcam-balance.mjs <label>                                     # credit balance, recorded privately
+node scripts/youcam-app-journey.mjs <baseUrl> <photo> <exampleIndex> <itemRegex> <label> [answer]   # real render through the UI
 ```
 
-Deployment: Vercel project `wearcheck` (framework pinned to Next.js in `vercel.json`), with production env vars set in the dashboard and a daily cron at 04:17 UTC (the Hobby plan allows daily cron only). Run `vercel deploy --prod`.
+Deployment: Vercel project `wearcheck`. Deploy with `vercel deploy --prod --build-env WEARCHECK_COMMIT=$(git rev-parse HEAD)`; the live site then reports the commit in an `X-WearCheck-Commit` response header. (framework pinned to Next.js in `vercel.json`), with production env vars set in the dashboard and a daily cron at 04:17 UTC (the Hobby plan allows daily cron only).
 
 ---
 
@@ -164,7 +171,8 @@ Deployment: Vercel project `wearcheck` (framework pinned to Next.js in `vercel.j
 
 ## Known limitations
 
-- No real YouCam render yet (see above), so the landing page has no recorded original/preview comparison. That section appears only once `lib/showcase.ts` holds a real, publicly permitted output.
+- The landing page has no recorded original/preview comparison. That section appears only once `lib/showcase.ts` holds a real output with public-use permission, which hasn't been given.
+- **Gemini free-tier capacity is small:** the served model allows 5 requests per minute and **20 per day** (observed 429: `generate_content_free_tier_requests, limit: 20, model: gemini-3.6-flash`). The optional `GEMINI_FALLBACK_MODEL` (`gemini-3.1-flash-lite`, also free tier) is tried only after a 429; it is a lighter model, so its observations may be less precise. When both are exhausted, users get the manual-entry fallback. Google also returns occasional 503 "high demand" errors, which the app retries once before showing "Try again".
 - The editorial set comes from mixed lifestyle shoots rather than a controlled studio session. A shared crop and colour grade bring it closer together, but a commissioned or licensed studio set would be better. Gemini image generation, which could have produced one, is not available on this free tier (429 on every image model).
 - The reference catalogue is small and historical (museum garments on dress forms).
 - PDF invitations are not supported; HEIC works only where the browser can decode it.
@@ -172,6 +180,6 @@ Deployment: Vercel project `wearcheck` (framework pinned to Next.js in `vercel.j
 
 ## Remaining manual actions
 
-1. Provide 2–3 full-length photos of one consenting adult, feet visible, at least 1024 px (narrow heels; a white or ivory outfit; smart casual) in `private-assets/people/`. Confirm in writing that the person is an adult and consents, and say separately whether public display is allowed.
-2. Then run both `scripts/youcam-proof.mjs` commands, the `live pipeline` e2e test locally and against the live URL, and a render's refresh-recovery path.
-3. Only with public-use permission: add the output to `lib/showcase.ts`, record the demo video, and use it in submission screenshots.
+1. **Public-use permission:** say whether the owner photos and their renders may appear on the landing page, README, submission screenshots or video. Until then they stay private, and `lib/showcase.ts` stays empty.
+2. With that permission: record the two-minute video (`docs/demo-script.md`).
+3. Optional: a licensed top and a contemporary dress/shoe reference set. The current catalogue has no tops, so a conflicting top only offers "try your own item".
