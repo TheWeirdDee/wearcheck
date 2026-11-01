@@ -20,7 +20,7 @@ const HEADINGS: Record<RenderCategory, string> = {
   outer: "Let's add a different outer layer",
 };
 
-export default async function OptionsPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ explore?: string; finding?: string }> }) {
+export default async function OptionsPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ explore?: string; finding?: string; category?: string }> }) {
   const check = await requireOwnedCheck((await params).id);
   const sp = await searchParams;
   const explore = sp.explore === "1";
@@ -44,12 +44,16 @@ export default async function OptionsPage({ params, searchParams }: { params: Pr
 
   if (explore || !key) {
     // Optional alternatives for a compatible outfit: any supported category, filtered by the user's rules.
-    const allowed = (["full_body", "upper_body", "outer", "shoes"] as RenderCategory[]).filter((c) => c !== "shoes" || res.shoes_assessable);
-    const items = voluntaryOptions(reqs.json, allowed);
+    const only = (["full_body", "upper_body", "outer", "shoes"] as RenderCategory[]).find((c) => c === sp.category);
+    const allowed = (only ? [only] : (["full_body", "upper_body", "outer", "shoes"] as RenderCategory[])).filter((c) => c !== "shoes" || res.shoes_assessable);
+    const items = only ? optionsFor({ rule_id: null, render_category: only }, reqs.json) : voluntaryOptions(reqs.json, allowed);
+    const reason = res.status === "compatible"
+      ? "Your outfit already looks compatible. This is entirely optional — keeping what you have is a complete result."
+      : `Your ${only === "shoes" ? "shoes already fit" : "outfit already fits"} the confirmed requirements here, so this preview is optional — only items that keep fitting them are shown.`;
     return (
       <OptionsView
-        checkId={check.id} findingId="voluntary" explore heading="Optional: try an alternative"
-        reason="Your outfit already looks compatible. This is entirely optional — keeping what you have is a complete result."
+        checkId={check.id} findingId="voluntary" explore heading={only === "shoes" ? "Optional: try different shoes" : "Optional: try an alternative"}
+        reason={reason}
         photoUrl={`/api/media/${photo.id}`} items={items.map(toItem)} allowedCategories={allowed} shoesAssessable={res.shoes_assessable}
       />
     );
