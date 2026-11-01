@@ -102,7 +102,7 @@ function RuleCard({ rule, onChange, onRemove, invitationUrl }: { rule: Rule; onC
               {rule.footwear_prefer.length ? `Suitable: ${rule.footwear_prefer.map((s) => FOOTWEAR_LABEL[s]).join(", ")}. ` : ""}
               {rule.footwear_avoid.length ? `Avoid: ${rule.footwear_avoid.map((s) => FOOTWEAR_LABEL[s]).join(", ")}.` : ""}
             </p>
-          ) : null}
+          ) : isFoot ? <p className="mt-1 text-sm text-ink-2">No specific style chosen — we&rsquo;ll ask you about this one instead of guessing.</p> : null}
           {rule.source === "invitation" && rule.evidence_text ? (
             <div className="mt-2">
               <button type="button" className="min-h-10 text-[0.95rem] underline underline-offset-4" aria-expanded={showSource} onClick={() => setShowSource((s) => !s)}>{showSource ? "Hide source" : "Show source text"}</button>
