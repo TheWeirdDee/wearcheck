@@ -1,88 +1,194 @@
 import type { Metadata } from "next";
+import Image from "next/image";
+import Link from "next/link";
+import { DocNav } from "@/components/doc-nav";
+import { Faq } from "@/components/faq";
+import { ArrowIcon, CheckIcon } from "@/components/icons";
 import { StartCheckButton } from "@/components/start-check-button";
+import { EDITORIAL, type EditorialImage } from "@/lib/editorial";
 
-export const metadata: Metadata = { title: "Photo guide & FAQ", description: "How to take a photo WearCheck can check, and how to read the verdict." };
+export const metadata: Metadata = {
+  title: "Photo guide & help",
+  description: "How to take a photo WearCheck can read, what its findings mean, how previews work, and what to do when something goes wrong.",
+};
 
-function PhotoDiagram({ ok, label, children }: { ok: boolean; label: string; children: React.ReactNode }) {
+const SECTIONS = [
+  { id: "photos", label: "Taking the photo" },
+  { id: "invitation", label: "Adding the invitation" },
+  { id: "findings", label: "Reading the findings" },
+  { id: "previews", label: "Previews" },
+  { id: "downloads", label: "Decision card" },
+  { id: "troubleshooting", label: "Troubleshooting" },
+];
+
+function Avoid({ img, title, children }: { img: EditorialImage; title: string; children: React.ReactNode }) {
   return (
     <figure className="flex flex-col">
-      <div className={`relative aspect-[3/4] border ${ok ? "border-ink" : "border-line"} bg-raised p-4`}>
-        <svg viewBox="0 0 120 160" className="h-full w-full text-ink" aria-hidden>
-          <rect x="1" y="1" width="118" height="158" fill="none" stroke="var(--line-strong)" strokeDasharray="3 3" />
-          {children}
-        </svg>
-        <span className={`absolute left-2 top-2 chip bg-bg ${ok ? "" : "line-through"}`}>{ok ? "Works" : "Avoid"}</span>
+      <div className="relative aspect-[4/5] overflow-hidden bg-photo">
+        <Image src={img.src} alt={img.alt} fill sizes="(min-width: 1024px) 16vw, (min-width: 640px) 30vw, 100vw" className="object-cover" />
+        <span className="absolute left-2.5 top-2.5 bg-bad px-2 py-1 text-[0.75rem] font-bold uppercase tracking-[0.08em] text-bg">Avoid</span>
       </div>
-      <figcaption className="mt-2 text-sm text-ink-2">{label}</figcaption>
+      <figcaption className="mt-3">
+        <p className="font-semibold">{title}</p>
+        <p className="mt-1 text-[0.95rem] leading-snug text-ink-2">{children}</p>
+      </figcaption>
     </figure>
   );
 }
 
-const person = (x: number, y: number, s = 1, crop = false) => (
-  <g transform={`translate(${x} ${y}) scale(${s})`} fill="none" stroke="currentColor" strokeWidth="1.4">
-    <circle cx="0" cy="10" r="7" />
-    <path d="M-10 20c4-3 16-3 20 0l2 26-3 3c2 14 6 30 10 46h-38c4-16 8-32 10-46l-3-3z" fill="var(--bg-sunk)" />
-    {!crop && <path d="M-4 95l-1 30M4 95l1 30M-9 125h6M3 125h6" />}
-  </g>
-);
+const STATES = [
+  { tone: "text-ok", t: "Looks compatible with your requirements", d: "Nothing you confirmed conflicts with what is visible. It is not the host's approval." },
+  { tone: "text-accent", t: "One change worth considering", d: "A practical point or recommendation — heels on a lawn, say. Not a broken rule." },
+  { tone: "text-bad", t: "Potential conflict", d: "Only when an explicit requirement you confirmed clearly contradicts something visible or something you told us." },
+  { tone: "text-warn", t: "Not enough information", d: "Something that matters isn't visible, or one question needs your answer first." },
+];
 
 export default function HelpPage() {
   return (
-    <div className="mx-auto max-w-[1100px] px-4 pt-10 sm:px-6 lg:px-10 lg:pt-16">
-      <p className="eyebrow">Help</p>
-      <h1 className="mt-3 text-4xl font-bold sm:text-5xl">Take a good photo</h1>
-      <p className="mt-4 max-w-2xl text-lg text-ink-2">WearCheck and the YouCam preview both work best with a clear, front-facing, full-length photo of one person standing.</p>
-      <div className="mt-10 grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <PhotoDiagram ok label="One person, head to toe, facing the camera, feet visible.">{person(60, 18)}</PhotoDiagram>
-        <PhotoDiagram ok={false} label="Feet cropped: we can't check or preview shoes.">{person(60, 40, 1.3, true)}</PhotoDiagram>
-        <PhotoDiagram ok={false} label="More than one person: we can't tell whose outfit to check.">{person(38, 22, 0.85)}{person(84, 22, 0.85)}</PhotoDiagram>
-        <PhotoDiagram ok={false} label="Very dim or coloured light makes garment colour unreliable.">
-          <rect x="1" y="1" width="118" height="158" fill="currentColor" opacity="0.55" />{person(60, 18)}
-        </PhotoDiagram>
-      </div>
-      <ul className="mt-8 grid gap-3 text-ink-2 sm:grid-cols-3">
-        <li className="border-t border-line pt-3"><strong className="text-ink">Daylight helps.</strong> Colour rules (like “no ivory”) depend on it; we&rsquo;ll ask you to confirm if unsure.</li>
-        <li className="border-t border-line pt-3"><strong className="text-ink">Plain background.</strong> Mirrors and busy rooms can confuse both models.</li>
-        <li className="border-t border-line pt-3"><strong className="text-ink">JPG, PNG or WebP.</strong> At least 1024px tall is best. HEIC works if your browser can open it.</li>
-      </ul>
+    <>
+      <header className="wrap pb-10 pt-10 lg:pb-14 lg:pt-16">
+        <p className="eyebrow">Help</p>
+        <div className="mt-5 grid gap-6 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)] lg:items-end">
+          <h1 className="t-1 max-w-[15ch]">Get a photo WearCheck can read.</h1>
+          <p className="lede">A clear photo makes every finding more useful. This guide also explains what the results mean, how previews work and what to do when something fails.</p>
+        </div>
+      </header>
 
-      <h2 id="verdict" className="mt-20 scroll-mt-20 text-3xl font-bold sm:text-4xl">Understand the verdict</h2>
-      <dl className="mt-8 grid gap-px border border-line bg-line sm:grid-cols-2">
-        {[
-          ["Looks compatible with the stated requirements", "Nothing you confirmed conflicts with what's visible. It isn't approval from your host."],
-          ["One change worth considering", "A recommendation or a practical point (like heels on grass). Not a broken rule."],
-          ["Potential dress-code conflict", "Only when an explicit rule you confirmed clearly contradicts something you confirmed or we can clearly see."],
-          ["Not enough information", "We can't see something that matters, or we need you to answer one question first."],
-        ].map(([t, d]) => (
-          <div key={t} className="bg-bg p-6">
-            <dt className="font-semibold">{t}</dt>
-            <dd className="mt-2 text-sm leading-relaxed text-ink-2">{d}</dd>
+      <div className="wrap grid gap-10 pb-16 lg:grid-cols-[15rem_minmax(0,1fr)] lg:gap-16 lg:pb-24">
+        <aside className="min-w-0 lg:sticky lg:top-28 lg:self-start">
+          <DocNav sections={SECTIONS} label="On this page" />
+          <div className="mt-8 hidden lg:block">
+            <StartCheckButton className="btn btn-primary w-full">Check my outfit</StartCheckButton>
           </div>
-        ))}
-      </dl>
-      <p className="mt-6 text-sm text-muted">
-        Sources are always shown: <span className="chip">From invitation</span> quotes the exact wording, <span className="chip">Entered by you</span> is what you typed, and <span className="chip">Suggested — confirm</span> is the model&rsquo;s inference that you approved.
-      </p>
+        </aside>
 
-      <h2 className="mt-20 text-3xl font-bold sm:text-4xl">FAQ</h2>
-      <div className="mt-6 divide-y divide-line border-y border-line">
-        {[
-          ["What if the invitation is ambiguous?", "Phrases like “dress to impress” or “festive chic” don't define specific clothing. WearCheck tells you it's ambiguous, doesn't invent hard rules, and lets you add context such as the venue."],
-          ["Why does the preview look different from me?", "Virtual try-on is generative. It can change lighting, fabric texture, hands, hair or background. Use it to judge the idea of the change, not the details."],
-          ["Can it tell me my size or whether shoes will be comfortable?", "No. It can't measure fit, sizing, comfort, stability or suitability for terrain. Generated shoes are a visual only."],
-          ["Does it understand religious or cultural dress requirements?", "Only what the invitation states explicitly and you confirm. It doesn't claim to know etiquette for any culture or faith; ask your host."],
-          ["Whose instructions win?", "The event organiser's. WearCheck is style guidance, not approval."],
-          ["Can I try my own item?", "Yes — on the options step, upload a clear photo of an item you own or are considering, and choose its category. It's labelled “Provided by you”."],
-        ].map(([q, a]) => (
-          <details key={q} className="group py-5">
-            <summary className="flex cursor-pointer list-none items-start justify-between gap-6 text-lg font-semibold [&::-webkit-details-marker]:hidden">
-              {q}<span aria-hidden className="mt-1 text-muted transition group-open:rotate-45">+</span>
-            </summary>
-            <p className="mt-3 leading-relaxed text-ink-2">{a}</p>
-          </details>
-        ))}
+        <div className="min-w-0 space-y-20 lg:space-y-28">
+          <section id="photos" aria-labelledby="photos-h" className="scroll-mt-28">
+            <h2 id="photos-h" className="t-2">Taking the photo</h2>
+            <div className="mt-8 grid gap-8 md:grid-cols-[minmax(0,7fr)_minmax(0,5fr)] md:gap-10">
+              <figure>
+                <div className="relative aspect-[4/5] overflow-hidden bg-photo">
+                  <Image src={EDITORIAL.guideGood.src} alt={EDITORIAL.guideGood.alt} fill sizes="(min-width: 1024px) 40vw, (min-width: 768px) 55vw, 100vw" className="object-cover" />
+                  <span className="absolute left-3 top-3 bg-ok px-2 py-1 text-[0.75rem] font-bold uppercase tracking-[0.08em] text-bg">Works well</span>
+                </div>
+                <figcaption className="photo-credit mt-3">{EDITORIAL.guideGood.credit}</figcaption>
+              </figure>
+              <div className="flex flex-col justify-center">
+                <p className="t-3">What a good photo has</p>
+                <ul className="mt-6 divide-y divide-line border-y border-line">
+                  {[
+                    ["One adult, standing", "Only the person whose outfit you're checking. Uploading means you have their permission."],
+                    ["Head to feet in frame", "Feet must be visible for any shoe finding or shoe preview."],
+                    ["Facing the camera", "Front or a slight turn. Sitting or crouching hides the outfit."],
+                    ["Even daylight, plain background", "Colour requests such as “no ivory” depend on it. Mirrors and busy rooms confuse the models."],
+                  ].map(([t, d]) => (
+                    <li key={t} className="flex gap-3 py-4">
+                      <CheckIcon className="mt-1 size-5 flex-none text-ok" />
+                      <div>
+                        <p className="font-semibold">{t}</p>
+                        <p className="mt-0.5 text-[0.975rem] text-ink-2">{d}</p>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+
+            <div className="mt-12 grid gap-8 sm:grid-cols-3">
+              <Avoid img={EDITORIAL.guideFeet} title="Feet cut off">Shoes can&rsquo;t be checked or previewed. You&rsquo;ll be asked what you plan to wear.</Avoid>
+              <Avoid img={EDITORIAL.guideTwo} title="More than one person">WearCheck can&rsquo;t tell whose outfit to check, and the preview may refuse the photo.</Avoid>
+              <Avoid img={EDITORIAL.guideDark} title="Dim or coloured light">Colours become unreliable. Any colour finding will ask you to confirm the shade.</Avoid>
+            </div>
+            <p className="photo-credit mt-4">The cropped and darkened versions are edits of the same editorial photo, made to show each problem.</p>
+
+            <dl className="mt-10 grid gap-6 border-t border-line pt-8 sm:grid-cols-3">
+              <div><dt className="font-semibold">Formats</dt><dd className="mt-1 text-ink-2">JPG, PNG or WebP. HEIC works if your browser can open it. PDFs aren&rsquo;t supported — take a screenshot instead.</dd></div>
+              <div><dt className="font-semibold">Size</dt><dd className="mt-1 text-ink-2">At least 512 px on the short side; 1,000 px or more works best. Large photos are resized before upload.</dd></div>
+              <div><dt className="font-semibold">Privacy</dt><dd className="mt-1 text-ink-2">Location and camera details are stripped when the photo is re-encoded. <Link href="/privacy" className="link">More on privacy</Link>.</dd></div>
+            </dl>
+          </section>
+
+          <section id="invitation" aria-labelledby="invitation-h" className="scroll-mt-28">
+            <h2 id="invitation-h" className="t-2">Adding the invitation</h2>
+            <div className="mt-6 grid gap-8 md:grid-cols-2">
+              <p className="text-ink-2">
+                Upload a photo or screenshot of the invitation, or type the details yourself. WearCheck reads the text, then shows you a list of requirements to edit and confirm. Nothing is assessed until you confirm.
+              </p>
+              <p className="text-ink-2">
+                Wording such as “dress to impress” or “festive chic” doesn&rsquo;t define particular clothes. WearCheck says it&rsquo;s ambiguous rather than inventing rules, and you can add context such as the venue.
+              </p>
+            </div>
+            <div className="mt-8 flex flex-wrap items-center gap-3 border-t border-line pt-6 text-[0.95rem] text-ink-2">
+              <span>Every requirement shows where it came from:</span>
+              <span className="chip">From invitation</span>
+              <span className="chip">Entered by you</span>
+              <span className="chip chip-accent">Suggested — confirm</span>
+            </div>
+            <p className="mt-4 text-[0.95rem] text-ink-2">
+              “From invitation” is used only when the exact words appear in the invitation text. Anything the model inferred stays a suggestion until you approve it.
+            </p>
+          </section>
+
+          <section id="findings" aria-labelledby="findings-h" className="scroll-mt-28">
+            <h2 id="findings-h" className="t-2">Reading the findings</h2>
+            <p className="mt-5 max-w-[60ch] text-ink-2">The assessment uses only the requirements you confirmed and what is visible in your photo. Each finding names the requirement behind it; select “Why?” to see the evidence.</p>
+            <ul className="mt-8 divide-y divide-line border-y border-line">
+              {STATES.map((s) => (
+                <li key={s.t} className="grid gap-2 py-6 sm:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] sm:gap-8">
+                  <p className={`font-display text-xl font-semibold leading-snug ${s.tone}`}>{s.t}</p>
+                  <p className="text-ink-2">{s.d}</p>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-6 text-[0.95rem] text-ink-2">
+              WearCheck won&rsquo;t claim certainty about formality, religious or cultural dress, colour in poor light, or whether the host will approve. In those cases it asks you a specific question.
+            </p>
+          </section>
+
+          <section id="previews" aria-labelledby="previews-h" className="scroll-mt-28">
+            <h2 id="previews-h" className="t-2">Previews</h2>
+            <div className="mt-6 grid gap-8 md:grid-cols-2">
+              <div className="space-y-4 text-ink-2">
+                <p>When a change is justified — or if you want to explore — you can choose one alternative: a pair of shoes, a dress or full outfit, a top, or an outer layer. YouCam&rsquo;s virtual try-on renders it onto your photo.</p>
+                <p>You can use one of WearCheck&rsquo;s visual references (they&rsquo;re styling references, not shop listings) or upload a photo of an item you own.</p>
+              </div>
+              <div className="space-y-4 text-ink-2">
+                <p>A preview can take a minute or more. You can leave the page and come back; the check remembers it. Each preview uses paid provider credit, so a failed preview is never retried automatically — you choose whether to try again.</p>
+                <p><strong className="font-semibold text-ink">A preview isn&rsquo;t proof</strong> of size, fit, fabric, comfort, or how shoes handle grass or gravel, and it may change details such as hands, hair or background.</p>
+              </div>
+            </div>
+          </section>
+
+          <section id="downloads" aria-labelledby="downloads-h" className="scroll-mt-28">
+            <h2 id="downloads-h" className="t-2">The decision card</h2>
+            <p className="mt-5 max-w-[62ch] text-ink-2">
+              Whatever you decide, you can download a card that summarises the event, the requirements, the findings and your decision — including when you keep your outfit unchanged. If you chose a change, it shows the original and the preview side by side. The card is an image file; only people you send it to will see it.
+            </p>
+          </section>
+
+          <section id="troubleshooting" aria-labelledby="troubleshooting-h" className="scroll-mt-28">
+            <h2 id="troubleshooting-h" className="t-2">Troubleshooting</h2>
+            <Faq
+              className="mt-8"
+              items={[
+                { q: "My photo was rejected", a: "Photos must be an image (not a PDF), at least 512 px on the short side, and not blank. Try a larger photo, or export it as JPG." },
+                { q: "The invitation couldn't be read", a: "The vision service may be busy or at its free-tier limit. Your upload isn't lost — type the details instead, or try again in a few minutes." },
+                { q: "The preview is taking a long time", a: "After a few minutes it's marked as delayed but keeps running. You can stop waiting and resume later from the same check. After 20 minutes it's treated as failed." },
+                { q: "The preview failed", a: "You'll see the reason — for example the photo shows more than one person, or the feet aren't visible for a shoe preview. Fix the photo or choose another item, then try again when you're ready." },
+                { q: "I can't open my check", a: "Checks belong to the browser that created them and expire 24 hours after you start. If it was deleted or has expired, start a new one." },
+                { q: "Can it tell me my size, or if shoes will be comfortable?", a: "No. It can't measure fit, sizing, comfort, stability or suitability for terrain." },
+              ]}
+            />
+          </section>
+
+          <div className="flex flex-col items-start gap-5 border-t border-ink pt-10 sm:flex-row sm:items-center sm:justify-between">
+            <p className="t-3">Ready when you are.</p>
+            <StartCheckButton className="btn btn-primary">
+              Check my outfit <ArrowIcon className="nudge size-4" />
+            </StartCheckButton>
+          </div>
+        </div>
       </div>
-      <div className="mt-14"><StartCheckButton className="btn btn-primary">Check my outfit</StartCheckButton></div>
-    </div>
+    </>
   );
 }
