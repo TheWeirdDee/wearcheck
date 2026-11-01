@@ -2,7 +2,7 @@ import "server-only";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import sharp from "sharp";
+import sharp, { type Metadata } from "sharp";
 import { catalogueItem } from "./catalogue";
 import { type CheckRow, type AssessmentRow, saveAsset, trackEvent } from "./checks";
 import { db } from "./db";
@@ -201,7 +201,7 @@ export async function advanceJob(jobId: string): Promise<JobRow> {
     // success → copy into private storage before the signed URL expires
     job = await setJob(job.id, { status: "persisting_result", provider_status: t.raw, last_polled_at: new Date() });
     const { bytes } = await downloadResult(t.url);
-    let meta: sharp.Metadata;
+    let meta: Metadata;
     try {
       meta = await sharp(bytes, { failOn: "error" }).metadata();
     } catch {
