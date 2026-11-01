@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { assertSameOrigin, handler, json, readJson } from "@/lib/api";
-import { modelId, observeOutfit } from "@/lib/ai/gemini";
+import { observeOutfit } from "@/lib/ai/gemini";
 import { currentRequirements, latestObservation, photoAsset, requireOwnedCheck } from "@/lib/checks";
 import { db } from "@/lib/db";
 import { AppError } from "@/lib/errors";
@@ -30,9 +30,9 @@ export const POST = handler("observe", async (req: Request, ctx: { params: Promi
 
   await limit("vision", check.guest_session_id, "AI readings");
   await limit("visionGlobal", "global", "AI readings today");
-  const observation = await observeOutfit(await getObject(photo.storage_key), reqs.json);
+  const { value: observation, model } = await observeOutfit(await getObject(photo.storage_key), reqs.json);
   const [row] = await db()`
     insert into wearcheck.outfit_observations (check_id, photo_asset_id, json, user_corrections, model_id)
-    values (${check.id}, ${photo.id}, ${db().json(observation as never)}, ${db().json((existing?.user_corrections ?? {}) as never)}, ${modelId()}) returning id`;
+    values (${check.id}, ${photo.id}, ${db().json(observation as never)}, ${db().json((existing?.user_corrections ?? {}) as never)}, ${model}) returning id`;
   return json({ observationId: row.id, cached: false });
 });
