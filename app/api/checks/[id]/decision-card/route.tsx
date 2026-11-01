@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { ImageResponse } from "next/og";
+import { MARK_PATH } from "@/components/logo";
 import sharp from "sharp";
 import { handler } from "@/lib/api";
 import { requireOwnedCheck, trackEvent } from "@/lib/checks";
@@ -19,7 +20,7 @@ async function dataUri(bytes: Buffer, w: number, h: number) {
   return `data:image/jpeg;base64,${out.toString("base64")}`;
 }
 
-const C = { ivory: "#F6F2EA", ink: "#1E1D1B", muted: "#6B665E", line: "#D9D2C5", accent: "#7A5C3E", ok: "#3F5D45" };
+const C = { ivory: "#F3EEE5", ink: "#1A1917", muted: "#625C53", line: "#D3C9B8", accent: "#8A4A2F", ok: "#35573D" };
 
 /**
  * Outfit Decision Card as a PNG (1080×1350). Images are embedded inline, so the file contains
@@ -68,8 +69,11 @@ export const GET = handler("decision_card", async (req: Request, ctx: { params: 
   return new ImageResponse(
     (
       <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", background: C.ivory, color: C.ink, padding: "56px 60px", fontFamily: "Inter" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", borderBottom: `2px solid ${C.ink}`, paddingBottom: 18 }}>
-          <div style={{ fontFamily: "Inter Tight", fontWeight: 700, fontSize: 34, letterSpacing: -0.5 }}>WearCheck</div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: `2px solid ${C.ink}`, paddingBottom: 18 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 14, fontFamily: "Inter Tight", fontWeight: 700, fontSize: 34, letterSpacing: -0.8 }}>
+            <svg width="40" height="40" viewBox="0 0 32 32"><rect width="32" height="32" fill={C.ink} /><path d={MARK_PATH} fill="none" stroke={C.ivory} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" /></svg>
+            WearCheck
+          </div>
           <div style={{ fontSize: 20, color: C.muted, letterSpacing: 2 }}>OUTFIT DECISION CARD</div>
         </div>
         <div style={{ display: "flex", flexDirection: "column", marginTop: 28 }}>
@@ -93,12 +97,12 @@ export const GET = handler("decision_card", async (req: Request, ctx: { params: 
         </div>
         <div style={{ display: "flex", flexDirection: "column", marginTop: 26, gap: 10, flexGrow: 1 }}>
           <div style={{ fontSize: 27, lineHeight: 1.35, fontWeight: 500 }}>{recommendation.slice(0, 260)}</div>
-          {evidence ? <div style={{ fontSize: 21, color: C.muted, lineHeight: 1.35 }}>Evidence: {evidence.slice(0, 200)}</div> : null}
-          <div style={{ fontSize: 21, color: C.muted }}>Dress code source: {dressCodeSource(r).slice(0, 120)}</div>
+          {evidence ? <div style={{ fontSize: 21, color: C.muted, lineHeight: 1.35 }}>{`Evidence: ${evidence.slice(0, 200)}`}</div> : null}
+          <div style={{ fontSize: 21, color: C.muted }}>{`Dress code source: ${dressCodeSource(r).slice(0, 120)}`}</div>
           {itemLine ? <div style={{ fontSize: 19, color: C.muted, lineHeight: 1.35 }}>{itemLine.slice(0, 220)}</div> : null}
         </div>
         <div style={{ display: "flex", justifyContent: "space-between", borderTop: `1px solid ${C.line}`, paddingTop: 16, fontSize: 18, color: C.muted }}>
-          <div style={{ display: "flex" }}>{CARD_DISCLAIMER}{twoUp ? " AI previews aren't proof of fit." : ""}</div>
+          <div style={{ display: "flex" }}>{`${CARD_DISCLAIMER}${twoUp ? " AI previews aren't proof of fit." : ""}`}</div>
           <div style={{ display: "flex" }}>{stamp}</div>
         </div>
       </div>
