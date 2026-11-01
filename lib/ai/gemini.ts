@@ -42,6 +42,8 @@ function jsonSchemaFor(schema: z.ZodType) {
 
 export type Served<T> = { value: T; model: string };
 
+const BUDGET_MS = 48_000;
+const PER_CALL_MS = 30_000;
 const isQuota = (e: unknown) => e instanceof ApiError && e.status === 429;
 const isBusy = (e: unknown) => !(e instanceof ApiError) || e.status >= 500; // 5xx "high demand" or a network failure
 
@@ -52,11 +54,14 @@ const isBusy = (e: unknown) => !(e instanceof ApiError) || e.status >= 500; // 5
  *   capacity; if it is also limited the user is told the free quota is used up.
  * - 5xx / network ("high demand") → one retry on the same model, then the fallback, then "busy".
  * - 400/403/404 → configuration problem; no retries.
+ * - Every attempt shares one time budget that ends before the route's 60 s limit, so a slow model
+ *   becomes an honest "busy, try again" instead of a platform timeout.
  * Returns the model that actually produced the result so callers can record it.
  */
 async function generate<T>(schema: z.ZodType<T>, system: string, image: Buffer, prompt: string, label: string): Promise<Served<T>> {
   const fallback = env().GEMINI_FALLBACK_MODEL;
   const models = [modelId(), ...(fallback && fallback !== modelId() ? [fallback] : [])];
+  const deadline = Date.now() + BUDGET_MS;
   const call = (model: string) =>
     ai().models.generateContent({
       model,
@@ -69,6 +74,7 @@ ${system}`,
         responseJsonSchema: jsonSchemaFor(schema),
         temperature: 0.1,
         maxOutputTokens: 4096,
+        abortSignal: AbortSignal.timeout(Math.min(PER_CALL_MS, Math.max(1000, deadline - Date.now()))),
       },
     });
 
@@ -77,6 +83,10 @@ ${system}`,
   const failures: ("quota" | "busy")[] = [];
   models: for (const model of models) {
     for (let attempt = 1; attempt <= 2; attempt++) {
+      if (deadline - Date.now() < 4000) {
+        failures.push("busy");
+        break models;
+      }
       try {
         res = await call(model);
         served = model;
