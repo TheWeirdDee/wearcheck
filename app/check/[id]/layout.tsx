@@ -10,9 +10,9 @@ export const dynamic = "force-dynamic";
 
 function Unavailable() {
   return (
-    <main id="main" className="mx-auto max-w-xl px-4 py-16 sm:px-6">
+    <main id="main" className="wrap max-w-3xl py-16 lg:py-24">
       <p className="eyebrow">Check unavailable</p>
-      <h1 className="mt-3 text-3xl font-bold">We can&rsquo;t open this check</h1>
+      <h1 className="t-2 mt-4">We can&rsquo;t open this check</h1>
       <p className="mt-4 text-ink-2">
         It may have been deleted, it may belong to another browser, or it expired — guest checks are kept for {GUEST_RETENTION_HOURS} hours. Nothing from it can be viewed.
       </p>
@@ -39,24 +39,24 @@ export default async function CheckIdLayout({ children, params }: { children: Re
   return (
     <>
       <WorkflowProgress />
-      <main id="main" className="mx-auto max-w-[1320px] px-4 pb-32 pt-6 sm:px-6 lg:grid lg:grid-cols-[260px_1fr] lg:gap-12 lg:px-10 lg:pt-10">
+      <main id="main" className="wrap pb-32 pt-6 lg:grid lg:grid-cols-[17rem_minmax(0,1fr)] lg:gap-14 lg:pt-10">
         <aside className="mb-6 hidden lg:block" aria-label="Event context">
-          <div className="sticky top-24 space-y-5 text-sm">
-            <div>
-              <p className="eyebrow">Event</p>
+          <div className="sticky top-28 space-y-6 text-[0.95rem]">
+            <div className="bg-raised p-5">
+              <p className="eyebrow plain">Your occasion</p>
               {r ? (
                 <>
-                  <p className="mt-2 font-display text-lg font-semibold leading-snug">{r.event_name ?? (r.event_type ? `${r.event_type[0].toUpperCase()}${r.event_type.slice(1)}` : "Your occasion")}</p>
+                  <p className="mt-3 font-display text-xl font-semibold leading-snug tracking-[-0.02em]">{r.event_name ?? (r.event_type ? `${r.event_type[0].toUpperCase()}${r.event_type.slice(1)}` : "Your occasion")}</p>
                   {r.dress_code ? <p className="mt-1 text-ink-2">{r.dress_code.value}</p> : <p className="mt-1 text-muted">No dress code stated</p>}
                   {r.venue.setting !== "unknown" ? <p className="mt-1 capitalize text-ink-2">{r.venue.setting}{r.venue.surface !== "unknown" ? ` · ${r.venue.surface.replace("_", " ")}` : ""}</p> : null}
-                  <p className="mt-2 text-muted">{r.rules.length} confirmed requirement{r.rules.length === 1 ? "" : "s"} · revision {reqs!.revision}</p>
+                  <p className="mt-4 border-t border-line pt-3 text-muted">{r.rules.length} confirmed requirement{r.rules.length === 1 ? "" : "s"} · revision {reqs!.revision}</p>
                   {r.origin === "demo_manual" ? <p className="mt-2 chip">Entered for this example</p> : null}
                 </>
               ) : (
                 <p className="mt-2 text-muted">Not confirmed yet</p>
               )}
             </div>
-            <div className="border-t border-line pt-4 text-muted">
+            <div className="px-1 text-muted">
               Kept privately until {new Date(check.expires_at).toUTCString().slice(5, 22)} UTC.
             </div>
             <CheckMenu checkId={check.id} />
