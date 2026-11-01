@@ -9,15 +9,15 @@ const origin = process.env.APP_ORIGIN ?? "http://localhost:3000";
 
 export const metadata: Metadata = {
   metadataBase: new URL(origin),
-  title: { default: "WearCheck — does your outfit fit the dress code?", template: "%s · WearCheck" },
+  title: { default: "WearCheck — check your outfit against the invitation", template: "%s · WearCheck" },
   description:
-    "Show WearCheck the invitation and the outfit you already own. Keep what works; preview the smallest justified change with a real AI try-on only when it helps.",
+    "Add the invitation and a photo of your outfit. See what matches the dress code, and preview one change with YouCam's virtual try-on if you need one.",
   applicationName: "WearCheck",
   openGraph: {
     type: "website",
     siteName: "WearCheck",
-    title: "WearCheck — does your outfit fit the dress code?",
-    description: "Check an outfit you already own against a real invitation. Keep what works; preview one change only when needed.",
+    title: "WearCheck — an outfit you own, an occasion to get right",
+    description: "Check the outfit you already own against the invitation. Keep it, or preview one justified change.",
   },
   twitter: { card: "summary_large_image" },
   formatDetection: { telephone: false, email: false, address: false },
@@ -28,8 +28,8 @@ export const viewport: Viewport = {
   initialScale: 1,
   viewportFit: "cover",
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f6f2ea" },
-    { media: "(prefers-color-scheme: dark)", color: "#161513" },
+    { media: "(prefers-color-scheme: light)", color: "#f3eee5" },
+    { media: "(prefers-color-scheme: dark)", color: "#121110" },
   ],
 };
 
