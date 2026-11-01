@@ -25,7 +25,10 @@ export async function api<T>(url: string, init: RequestInit = {}): Promise<T> {
   }
   if (!res.ok) {
     const env = (data as { error?: ApiErrorBody } | null)?.error;
-    throw new ClientApiError(res.status, env ?? { code: "HTTP_" + res.status, message: "Something went wrong. Please try again.", retryable: true, action: "RETRY" });
+    const fallback = res.status === 504 || res.status === 408
+      ? "This took longer than the server allows — usually a slow AI service. Your check is saved; please try again."
+      : "Something went wrong. Please try again.";
+    throw new ClientApiError(res.status, env ?? { code: "HTTP_" + res.status, message: fallback, retryable: true, action: "RETRY" });
   }
   return data as T;
 }
