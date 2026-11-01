@@ -123,7 +123,9 @@ export const CATALOGUE: CatalogueItem[] = [
     licence: "CC0 1.0",
     licence_url: "https://creativecommons.org/publicdomain/zero/1.0/",
     modifications: "Resized and padded to 3:4 by repeating edge pixels.",
-    is_purchasable: false, sku: null, enabled: true,
+    // Disabled after review: the photo shows a dress plus a separate bolero, and YouCam's
+    // reference spec requires "a front-facing product shot of a single garment" with no composites.
+    is_purchasable: false, sku: null, enabled: false,
   },
   {
     id: "jacket-plaid-wool",
