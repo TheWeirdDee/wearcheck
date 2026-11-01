@@ -42,11 +42,17 @@ describe("engine error mapping", () => {
 describe("catalogue matching", () => {
   const finding = (cat: Finding["render_category"]): Finding => ({ id: "f1", rule_id: null, area: "clothing", kind: "explicit_rule", status: "conflict", observation: "", reason: "", evidence_text: null, evidence_source: "user", uncertainty: null, user_action: "preview_garment", render_category: cat, rank: 1 });
 
+  it("offers a non-white top as the built-in correction for 'avoid white or ivory'", () => {
+    const rq = fromManual({ event_name: "", event_type: "wedding", dress_code: "", setting: "indoor", restrictions: "Please avoid white or ivory", event_date: "" });
+    const tops = optionsFor(finding("upper_body"), rq);
+    expect(tops.map((t) => t.id)).toContain("top-blue-shirt");
+  });
+
   it("never offers an item in an excluded colour", () => {
     const rq = fromManual({ event_name: "", event_type: "wedding", dress_code: "", setting: "indoor", restrictions: "No black or navy", event_date: "" });
     const items = optionsFor(finding("full_body"), rq);
     expect(items.every((i) => !i.colours.some((c) => c === "black" || c === "navy"))).toBe(true);
-    // The remaining full-body references are black and navy, so nothing may be offered; the UI then offers "try your own item".
+    // The only full-body reference is black, so nothing may be offered; the UI then offers "try your own item".
     expect(items).toEqual([]);
     const pale = fromManual({ event_name: "", event_type: "wedding", dress_code: "", setting: "indoor", restrictions: "Please avoid white or ivory", event_date: "" });
     const ok = optionsFor(finding("full_body"), pale);
@@ -57,7 +63,10 @@ describe("catalogue matching", () => {
   it("only offers footwear that satisfies the footwear rule", () => {
     const rq = fromManual({ event_name: "", event_type: "wedding", dress_code: "", setting: "outdoor", restrictions: "Flats or wedges recommended", event_date: "" });
     const items = optionsFor(finding("shoes"), rq);
-    expect(items.map((i) => i.footwear_style)).toEqual(["wedge"]);
+    const styles = items.map((i) => i.footwear_style);
+    expect(styles.length).toBeGreaterThan(0);
+    expect(styles.every((s) => ["flat", "flat_sandal", "loafer", "wedge"].includes(s!))).toBe(true);
+    expect(styles).not.toContain("stiletto_heel");
   });
 
   it("every catalogue item is non-purchasable with a documented licence", async () => {
