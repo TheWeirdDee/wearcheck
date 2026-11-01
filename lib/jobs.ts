@@ -75,7 +75,7 @@ export async function requestRender(r: RenderRequest): Promise<JobRow> {
     refKey = `cat:${item.id}`;
     // Re-validate on the server: the item must still be an eligible correction under the confirmed requirements.
     const reqs = await currentRequirements(r.check);
-    if (!reqs || !optionsFor({ render_category: finding.render_category, rule_id: findingRuleId }, reqs.json).some((c) => c.id === item.id)) {
+    if (!reqs || !optionsFor({ render_category: item.category, rule_id: findingRuleId }, reqs.json).some((c) => c.id === item.id)) {
       throw new AppError("ITEM_NOT_ELIGIBLE", "That reference doesn't meet your confirmed requirements. Please choose another item or upload your own.", 400, false, "CHOOSE_ANOTHER_ITEM");
     }
   } else {
@@ -84,9 +84,13 @@ export async function requestRender(r: RenderRequest): Promise<JobRow> {
     category = r.reference.category;
     refKey = `user:${r.reference.assetId}`;
   }
-  if (category !== finding.render_category) {
+  // Shoes fix shoe findings; a garment finding can be addressed by any garment operation the photo supports.
+  const garment = (c: RenderCategory) => c !== "shoes";
+  if (category !== finding.render_category && !(garment(category) && garment(finding.render_category))) {
     throw new AppError("CATEGORY_MISMATCH", "That item doesn't address this finding. Please choose an item of the matching type.", 400, false, "CHOOSE_ANOTHER_ITEM");
   }
+  const support = r.assessment.findings_json.photo_supports?.[category];
+  if (support && !support.ok) throw new AppError("PHOTO_UNSUPPORTED", `This photo can't be used for that change: ${support.reason}`, 422, true, "RETAKE_PHOTO");
   if (category === "shoes" && !r.assessment.findings_json.shoes_assessable) {
     throw new AppError("PHOTO_FEET_NOT_VISIBLE", "We need to see your shoes for a shoe preview.", 422, true, "RETAKE_PHOTO");
   }
