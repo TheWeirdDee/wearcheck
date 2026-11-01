@@ -210,13 +210,13 @@ async function renderJourney(page: Page, browser: Browser, context: BrowserConte
   await page.getByRole("link", { name: "Preview the smallest change" }).click();
   await page.waitForURL(/\/options$/);
   await expect(page.getByText("What gets replaced")).toBeVisible();
-  for (const w of await page.getByTestId("catalogue").locator("li").evaluateAll((els) => els.map((e) => e.getBoundingClientRect().width))) expect(w).toBeGreaterThanOrEqual(240);
+  for (const w of await page.getByTestId("catalogue").locator(":scope > li").evaluateAll((els) => els.map((e) => e.getBoundingClientRect().width))) expect(w).toBeGreaterThanOrEqual(240);
   if (o.upload) {
     await page.getByRole("checkbox", { name: /I own this image/ }).check();
     await page.locator('input[aria-label="Upload your own reference item"]').setInputFiles(o.upload);
     await expect(page.getByText("Selected: your item")).toBeVisible({ timeout: 60_000 });
   } else {
-    const card = page.getByTestId("catalogue").locator("li", { has: page.getByRole("heading", { name: o.item! }) });
+    const card = page.getByTestId("catalogue").locator(":scope > li", { has: page.getByRole("heading", { name: o.item! }) });
     await card.getByRole("button", { name: "Select this item" }).click();
   }
   // Before generating: original, the selected reference, what's replaced and by which API, and why.
