@@ -1,24 +1,19 @@
-# WearCheck — two-minute demo script and shot list
+# WearCheck — two-minute demo: script and shot list
 
-Target length: **exactly 120 seconds**. Record from the deployed app (https://wearcheck.vercel.app), not localhost. Burn in captions that match the voiceover.
+**Status:** recorded and edited, **not uploaded**. File: `private-ops/video/wearcheck-demo-120s.mp4`, exactly 120.00 s, 1280×720, H.264 + AAC, with burned-in captions and a synthesised voiceover. It was recorded from https://wearcheck.vercel.app on 2026-11-01 with `scripts/demo-record.mjs` and cut with `scripts/demo-edit.mjs`. The edit enforces the 120-second total and writes its cut list next to the video.
 
-**Before recording**
-- A real YouCam render must exist from a photo whose subject has given **public-use** permission. Without one, cut shot 7 and do not show or imply a preview.
-- If you speed up waiting time (Gemini reading, YouCam rendering), show an on-screen label, e.g. "Sped up ×4 — real render took 38 s", using the latency recorded in `private-ops/youcam-runs.jsonl`.
-- Don't show the address bar on check URLs, any API keys or the Vercel or Supabase dashboards.
+Always on screen: "Recorded on wearcheck.vercel.app · 1 Nov 2026".
 
-| # | Time | Shot | Voiceover / caption |
-|---|---|---|---|
-| 1 | 0:00–0:10 | Landing hero, slow push-in on the photo and notes | "You've got the invitation, and the outfit's already in your wardrobe. Does it actually work for this event?" |
-| 2 | 0:10–0:22 | Scroll through the how-it-works story; panels move sideways | "WearCheck starts with what the invitation says, then looks at the outfit you already own." |
-| 3 | 0:22–0:38 | New check → upload the sample invitation (labelled as a sample) → requirements list with "From invitation" quotes | "It quotes the exact wording — 'flats or wedges recommended', 'please avoid white or ivory' — and you confirm every requirement." |
-| 4 | 0:38–0:52 | Outfit step: permissioned photo, consent box ticked, Continue | "One photo, with consent. It says plainly what it can and can't see." |
-| 5 | 0:52–1:10 | Findings: status, key finding, "Why?" opened to show the quoted rule | "Each finding names the rule behind it. If the photo can't answer a requirement, it asks you instead of guessing." |
-| 6 | 1:10–1:22 | Options: one reference item, labelled "Visual reference — not a live shopping listing" | "If one item conflicts, you pick a single alternative. It's a reference, not something to buy." |
-| 7 | 1:22–1:42 | Preview: real YouCam render; drag the comparison slider; caption with recorded latency | "YouCam renders it onto your own photo. It shows the idea of the change — not fit, size or comfort." |
-| 8 | 1:42–1:54 | Decision page and card download | "You decide. Keeping your outfit is a complete answer, and you get a card either way." |
-| 9 | 1:54–2:00 | Logo and URL | "WearCheck. An outfit you own. An occasion to get right." |
+| # | Final time | Shot (real app) | Voiceover = caption | On-screen disclosure |
+|---|---|---|---|---|
+| 1 | 0:00–0:09 | Landing hero | "You have the invitation. The outfit is already in your wardrobe. Does it work for this event?" | — |
+| 2 | 0:09–0:20 | How-it-works story, stepping through the panels | "WearCheck starts with what the invitation says, then looks at the outfit you already own." | — |
+| 3 | 0:20–0:41 | Upload the sample invitation → Gemini reads it → requirements with "From invitation" quotes | "Upload the invitation. Gemini reads it, and each requirement is quoted word for word, for you to confirm. Nothing is judged until you do." | "Sample invitation created for this demo, not a real event." · "Gemini reading sped up ×1.2 (actual 8.2 s)" |
+| 4 | 0:41–0:53 | Outfit step: CC0 photo, consent ticked | "Then add one full-length photo, with consent." | "Photo: Brooke Cagle / Unsplash (CC0). The person shown has not reviewed this AI preview." |
+| 5 | 0:53–1:11 | Findings: "Your shoes appear to be boots", "Why?" opened showing the quoted rule | "Each finding names the rule behind it. Here, boots don't match the request for flats or wedges on a lawn." | "Gemini reading sped up ×2.3 (actual 7.0 s)" |
+| 6 | 1:11–1:21 | Options: tan oxford selected, "Visual reference — not a live shopping listing" | "Choose one alternative. It's a visual reference, not a shopping listing." | — |
+| 7 | 1:21–1:40 | Real Shoes V3 render → comparison slider dragged | "YouCam renders it onto the photo, live. It shows the idea of the change, not fit, size or comfort." | "Real YouCam Shoes V3 render on the live site." · "YouCam render sped up ×3.5 (actual 18.2 s)" |
+| 8 | 1:40–1:52 | Decision page and decision card | "You decide, and download a decision card. Keeping your outfit is a complete answer too." | — |
+| 9 | 1:52–2:00 | Landing page | "WearCheck. An outfit you own. An occasion to get right." | — |
 
-**Fallback cut with no permitted render (still 120 s):** replace shot 7 with the compatible example. Show its findings, then *Save my outfit check*, then the decision card. Narration for shot 6: "When nothing conflicts, that's the result — no preview, nothing to buy." Don't mention YouCam output.
-
-**Status:** script and shot list only. **No video has been recorded.** Recording it needs (a) a permitted real render and (b) a screen recorder plus a voiceover recording, neither of which is available in this environment. Nothing has been uploaded anywhere.
+**To re-record with a different, fully consented photo:** run `node scripts/demo-record.mjs https://wearcheck.vercel.app <photo>`, then `node scripts/demo-edit.mjs private-ops/video/raw-<stamp>.webm <ffmpeg.exe>`. Update the caption text in `scripts/demo-edit.mjs` if the findings differ. Each recording uses one real render (2 units).
