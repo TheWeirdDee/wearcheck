@@ -130,3 +130,24 @@ describe("F04 a positive verdict needs a visible outfit", () => {
     expect(checked.headline).toBe("Looks compatible with the stated requirements");
   });
 });
+
+describe("model labels never override the quoted wording", () => {
+  const base: InvitationExtraction = {
+    readable: true, full_text: "Dress code: Formal. Flats or wedges recommended. Please avoid white or ivory.", event_name: null, event_type: "wedding", event_date: null,
+    dress_code_text: "Formal", dress_code_is_ambiguous: false, venue_setting: "outdoor", venue_surface: "grass", venue_evidence_text: null,
+    rules: [], suggestions: [], uncertainties: [],
+  };
+  it("“Please avoid white or ivory” labelled as a colour request becomes an exclusion", () => {
+    const [rule] = fromExtraction({ ...base, rules: [{ type: "colour_request", summary: "Avoid white or ivory", evidence_text: "Please avoid white or ivory", wording_strength: "request", colours: ["white", "ivory_cream"], footwear_avoid: [], footwear_prefer: [] }] }).rules;
+    expect(rule.type).toBe("colour_exclusion");
+    expect(rule.severity).toBe("hard");
+  });
+  it("a footwear suggestion keeps its styles instead of becoming an open question", () => {
+    const [rule] = fromExtraction({ ...base, suggestions: [{ type: "footwear_preference", summary: "Avoid stilettos", reason: "lawn" }] }).rules;
+    expect(rule.type).toBe("footwear_preference");
+    expect(rule.footwear_avoid).toContain("stiletto_heel");
+    const r = assess({ ...fromExtraction(base), rules: [rule] }, obs([garment("suit", "brown"), shoes("loafer")]), {}, ALL);
+    expect(r.clarification).toBeNull();
+  });
+});
+
