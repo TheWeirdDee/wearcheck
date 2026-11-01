@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import { assertSameOrigin, handler, json, readJson } from "@/lib/api";
 import { modelId, observeOutfit } from "@/lib/ai/gemini";
-import { availableCategories } from "@/lib/catalogue";
+import { previewableCategories } from "@/lib/catalogue";
 import { currentAssessment, currentRequirements, latestObservation, photoAsset, requireOwnedCheck, setStep, trackEvent } from "@/lib/checks";
 import { db } from "@/lib/db";
 import { AppError } from "@/lib/errors";
@@ -60,7 +60,7 @@ export const POST = handler("assessment", async (req: Request, ctx: { params: Pr
     return json({ assessmentId: existing.id, result: existing.findings_json });
   }
 
-  const result = assess(reqs.json, obs.json, obs.user_corrections ?? {}, availableCategories());
+  const result = assess(reqs.json, obs.json, obs.user_corrections ?? {}, previewableCategories());
   const created = await db().begin(async (sql) => {
     // Re-check the revision inside the transaction so a concurrent edit can't be overwritten by a stale result.
     const [c] = await sql`select requirements_revision, photo_asset_id from wearcheck.checks where id = ${check.id} for update`;
