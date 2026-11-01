@@ -3,7 +3,7 @@ import Link from "next/link";
 import { DownloadIcon } from "@/components/icons";
 import { StartCheckButton } from "@/components/start-check-button";
 import { requireOwnedCheck } from "@/lib/checks";
-import { CARD_DISCLAIMER, dressCodeSource, loadDecision, SOURCE_LABEL } from "@/lib/decision";
+import { CARD_DISCLAIMER, dressCodeSource, loadDecision, SOURCE_LABEL, unresolvedNote } from "@/lib/decision";
 
 export const metadata: Metadata = { title: "Your outfit decision" };
 
@@ -33,19 +33,19 @@ export default async function DecisionPage({ params }: { params: Promise<{ id: s
       <p className="lede mt-4 max-w-[44ch]">{keep ? (d.result.status === "compatible" ? "Nothing in the requirements you confirmed conflicts with it." : "You chose to keep what you have. The findings are summarised below.") : "You chose the previewed change. Compare it with your original before you commit."}</p>
 
       <div className="mt-10 grid gap-10 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] lg:gap-12">
-        <div className="grid grid-cols-[1fr_auto] items-start gap-3">
-          <figure className="relative">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={preview ?? original} alt={preview ? "AI-generated preview of the chosen change" : "Your original outfit photo"} className="aspect-[4/5] max-h-[76vh] w-full bg-photo object-contain" />
-            {preview ? <span className="ai-label absolute left-3 top-3">AI preview</span> : <span className="absolute left-3 top-3 bg-bg px-2.5 py-1 text-[0.75rem] font-bold uppercase tracking-[0.08em]">Original</span>}
-          </figure>
+        <div className={`grid items-start gap-3 ${preview ? "grid-cols-2" : "grid-cols-1"}`}>
           {preview ? (
-            <figure className="w-20 sm:w-28">
+            <figure className="relative">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={`${original}?size=thumb`} alt="Original outfit photo" className="w-full bg-photo object-contain" />
-              <figcaption className="photo-credit mt-2">Original</figcaption>
+              <img src={original} alt="Your original outfit photo" className="aspect-[4/5] max-h-[calc(100svh-12rem)] w-full bg-photo object-contain" />
+              <figcaption className="absolute left-2 top-2 bg-bg px-2 py-0.5 text-[0.7rem] font-bold uppercase tracking-[0.08em]">Original</figcaption>
             </figure>
           ) : null}
+          <figure className="relative">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={preview ?? original} alt={preview ? "AI-generated preview of the chosen change" : "Your original outfit photo"} className="aspect-[4/5] max-h-[calc(100svh-12rem)] w-full bg-photo object-contain" />
+            {preview ? <span className="ai-label absolute right-2 top-2">AI preview</span> : <span className="absolute left-3 top-3 bg-bg px-2.5 py-1 text-[0.75rem] font-bold uppercase tracking-[0.08em]">Original</span>}
+          </figure>
         </div>
 
         <div>
@@ -58,6 +58,7 @@ export default async function DecisionPage({ params }: { params: Promise<{ id: s
               <div className="py-4"><dt className="text-[0.875rem] text-muted">Reference item</dt><dd className="mt-1">{d.item.title}<span className="block text-[0.8125rem] text-muted">{d.item.creator}, {d.item.licence} · Visual reference — not a live shopping listing.</span></dd></div>
             ) : d.userRefAssetId ? <div className="py-4"><dt className="text-[0.875rem] text-muted">Reference item</dt><dd className="mt-1">Provided by you</dd></div> : null}
           </dl>
+          {!keep && kf && unresolvedNote(kf, r) ? <p className="mt-4 border-l-2 border-warn pl-3 text-[0.95rem]">{unresolvedNote(kf, r)}</p> : null}
           <p className="mt-4 text-[0.9rem] text-muted">{CARD_DISCLAIMER}</p>
 
           <div className="mt-8 flex flex-col gap-3">
