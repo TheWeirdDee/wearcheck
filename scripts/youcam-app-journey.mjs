@@ -49,7 +49,13 @@ try {
 
   await page.getByRole("link", { name: /Preview the smallest change|Explore alternatives/ }).first().click();
   await page.waitForURL(/\/options/);
-  const card = page.locator("li", { has: page.getByRole("heading", { name: new RegExp(itemPattern, "i") }) }).first();
+  let card = page.locator("li", { has: page.getByRole("heading", { name: new RegExp(itemPattern, "i") }) }).first();
+  if (!(await card.count())) {
+    // The finding's own options don't include this item; use the optional "explore alternatives" list instead.
+    step("item_not_in_finding_options", { url: new URL(page.url()).pathname });
+    await page.goto(`${base}/check/${summary.checkId}/options?explore=1`);
+    card = page.locator("li", { has: page.getByRole("heading", { name: new RegExp(itemPattern, "i") }) }).first();
+  }
   await card.getByRole("button", { name: /Try this|Selected/ }).click();
   await page.getByRole("button", { name: "Generate preview" }).click();
   await page.waitForURL(/\/preview\?job=/, { timeout: 60_000 });
