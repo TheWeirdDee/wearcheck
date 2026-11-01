@@ -17,9 +17,11 @@ type Props = {
   initialJob: PublicJob;
   originalUrl: string;
   item: { title: string; file: string | null; userUrl: string | null; credit: string | null; reason: string };
+  /** What the person should check in the generated image; WearCheck doesn't re-check it. */
+  unresolvedNote: string | null;
 };
 
-export function PreviewRunner({ checkId, initialJob, originalUrl, item }: Props) {
+export function PreviewRunner({ checkId, initialJob, originalUrl, item, unresolvedNote }: Props) {
   const router = useRouter();
   const [job, setJob] = useState<PublicJob>(initialJob);
   const initiallyDone = initialJob.status === "completed";
@@ -28,6 +30,7 @@ export function PreviewRunner({ checkId, initialJob, originalUrl, item }: Props)
   const [error, setError] = useState<string | null>(null);
   const [offline, setOffline] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const result = useRef<HTMLDivElement>(null);
 
   const jobId = initialJob.id;
   useEffect(() => {
@@ -107,6 +110,11 @@ export function PreviewRunner({ checkId, initialJob, originalUrl, item }: Props)
   const done = job.status === "completed" && job.resultUrl;
   const failed = job.status === "failed" || job.status === "expired";
 
+  // Bring the whole comparison (controls and full-length photo) into view once the result is in.
+  useEffect(() => {
+    if (done) result.current?.scrollIntoView({ block: "start", behavior: initiallyDone ? "auto" : "smooth" });
+  }, [done, initiallyDone]);
+
   return (
     <div>
       <p className="eyebrow plain">Step 4 · {job.feature === "shoes-transfer" ? "Shoe preview" : "Garment preview"} by YouCam</p>
@@ -116,7 +124,8 @@ export function PreviewRunner({ checkId, initialJob, originalUrl, item }: Props)
       {done ? (
         <MotionConfig reducedMotion="user">
         <motion.div
-          className="mt-8 grid gap-10 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]"
+          ref={result}
+          className="mt-6 grid scroll-mt-[5.5rem] gap-8 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] lg:gap-10"
           initial={initiallyDone ? false : { opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
@@ -125,6 +134,7 @@ export function PreviewRunner({ checkId, initialJob, originalUrl, item }: Props)
           <div>
             <h2 className="t-3">{item.title}</h2>
             <p className="mt-2 text-ink-2">{item.reason}</p>
+            {unresolvedNote ? <p className="mt-4 border-l-2 border-warn pl-3 text-[0.95rem]">{unresolvedNote}</p> : null}
             {item.credit ? <p className="photo-credit mt-2">{item.credit}</p> : null}
             <div className="mt-8 flex flex-col gap-3 border-t border-line pt-6">
               {!job.stale ? <button type="button" className="btn btn-primary" onClick={() => decide("change")} disabled={busy}>Use this look</button> : null}
