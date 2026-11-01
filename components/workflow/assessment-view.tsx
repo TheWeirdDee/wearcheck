@@ -138,6 +138,8 @@ export function AssessmentView(p: Props) {
   const key = res.findings.find((f) => f.id === res.key_finding_id) ?? null;
   const secondary = res.findings.filter((f) => f.id !== key?.id && f.status !== "ok").slice(0, 4);
   const canPreview = Boolean(res.primary_action);
+  // Other findings that can also be previewed (e.g. the shoes, when the key finding is a garment).
+  const alsoPreviewable = res.status === "insufficient" ? [] : res.findings.filter((f) => f.id !== key?.id && (f.status === "conflict" || f.status === "consider_change") && f.render_category && (f.user_action === "preview_shoes" || f.user_action === "preview_garment"));
   const compatible = res.status === "compatible";
 
   return (
@@ -184,6 +186,7 @@ export function AssessmentView(p: Props) {
                       const id = res.clarification!.id;
                       if (id === "main_garment_colour") answer({ main_garment_colour: o.value as ColourFamily });
                       else if (id === "footwear_style") answer({ footwear_style: o.value as FootwearStyle });
+                      else if (id.startsWith("colour:")) answer({ garment_colours: { [id.slice(7)]: o.value as ColourFamily } });
                       else answer({ rule_answers: { [id.slice(5)]: o.value as "applies" | "does_not_apply" } });
                     }}>
                     {o.label}
@@ -211,6 +214,19 @@ export function AssessmentView(p: Props) {
               <button type="button" className="btn btn-secondary" onClick={decideKeep} disabled={busy || Boolean(res.clarification)}>Keep this outfit</button>
             )}
           </div>
+          {alsoPreviewable.length ? (
+            <div className="mt-6 bg-raised p-4" aria-labelledby="h-also">
+              <p id="h-also" className="text-[0.875rem] font-semibold uppercase tracking-[0.06em] text-ink-2">Also worth a look</p>
+              <ul className="mt-2 space-y-3">
+                {alsoPreviewable.map((f) => (
+                  <li key={f.id} className="flex flex-wrap items-center justify-between gap-3">
+                    <span className="min-w-0 flex-1"><span className="font-medium">{f.observation}</span> <span className="text-ink-2">{f.reason}</span></span>
+                    <Link href={`/check/${p.checkId}/options?finding=${f.id}`} className="btn btn-secondary btn-sm">Preview this change</Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
           <div className="mt-4 flex flex-wrap gap-x-6 gap-y-1">
             <button type="button" className="btn btn-quiet text-[0.95rem]" aria-expanded={showCorrect} onClick={() => setShowCorrect((s) => !s)}>Correct my outfit details</button>
             <Link href={`/check/${p.checkId}/requirements`} className="btn btn-quiet text-[0.95rem]">Edit event</Link>
