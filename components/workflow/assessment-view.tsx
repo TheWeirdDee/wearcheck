@@ -141,6 +141,9 @@ export function AssessmentView(p: Props) {
   // Other findings that can also be previewed (e.g. the shoes, when the key finding is a garment).
   const alsoPreviewable = res.status === "insufficient" ? [] : res.findings.filter((f) => f.id !== key?.id && (f.status === "conflict" || f.status === "consider_change") && f.render_category && (f.user_action === "preview_shoes" || f.user_action === "preview_garment"));
   const compatible = res.status === "compatible";
+  // Shoes that already fit can still be previewed, clearly labelled as optional.
+  const optionalShoes = !compatible && res.status !== "insufficient" && res.shoes_assessable && key?.render_category !== "shoes" && !alsoPreviewable.some((f) => f.render_category === "shoes")
+    ? res.findings.find((f) => f.area === "shoes_venue" && f.status === "ok") ?? null : null;
 
   return (
     <div>
@@ -214,7 +217,7 @@ export function AssessmentView(p: Props) {
               <button type="button" className="btn btn-secondary" onClick={decideKeep} disabled={busy || Boolean(res.clarification)}>Keep this outfit</button>
             )}
           </div>
-          {alsoPreviewable.length ? (
+          {alsoPreviewable.length || optionalShoes ? (
             <div className="mt-6 bg-raised p-4" aria-labelledby="h-also">
               <p id="h-also" className="text-[0.875rem] font-semibold uppercase tracking-[0.06em] text-ink-2">Also worth a look</p>
               <ul className="mt-2 space-y-3">
@@ -224,6 +227,12 @@ export function AssessmentView(p: Props) {
                     <Link href={`/check/${p.checkId}/options?finding=${f.id}`} className="btn btn-secondary btn-sm">Preview this change</Link>
                   </li>
                 ))}
+                {optionalShoes ? (
+                  <li className="flex flex-wrap items-center justify-between gap-3">
+                    <span className="min-w-0 flex-1"><span className="font-medium">{optionalShoes.observation}</span> <span className="text-ink-2">{optionalShoes.reason} Previewing another pair is optional.</span></span>
+                    <Link href={`/check/${p.checkId}/options?explore=1&category=shoes`} className="btn btn-secondary btn-sm">Try different shoes</Link>
+                  </li>
+                ) : null}
               </ul>
             </div>
           ) : null}
