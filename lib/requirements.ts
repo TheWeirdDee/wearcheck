@@ -46,7 +46,7 @@ export function parseRestrictionText(text: string): Rule[] {
     if (footwearish) {
       const prefer: FootwearStyle[] = [];
       const avoid: FootwearStyle[] = [];
-      if (/\bflats?\b/.test(t)) prefer.push("flat", "flat_sandal");
+      if (/\bflats?\b/.test(t)) prefer.push("flat", "flat_sandal", "loafer"); // loafers are flat shoes
       if (/\bwedges?\b/.test(t)) prefer.push("wedge");
       if (/\bblock heels?\b/.test(t)) prefer.push("block_heel");
       if (/\b(stiletto|high heels?|heels)\b/.test(t) && (negative || prefer.length > 0)) avoid.push("stiletto_heel", "kitten_heel", "heeled_sandal");
