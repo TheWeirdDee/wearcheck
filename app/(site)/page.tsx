@@ -145,8 +145,10 @@ export default function Home() {
               <p className="eyebrow">Recorded result</p>
               <h2 id="compare-title" className="t-2 mt-4">Original and preview, side by side.</h2>
               <p className="mt-4 text-ink-2">
-                A saved output from a real YouCam task on {SHOWCASE[0].recordedAt.slice(0, 10)}, shown with the subject&rsquo;s permission. It is a recording, not a fresh call. {SHOWCASE[0].requirement} → {SHOWCASE[0].change}.
+                {SHOWCASE[0].requirement}: {SHOWCASE[0].change}. A saved output from a real YouCam {SHOWCASE[0].feature === "Shoes V3" ? "shoe" : "garment"} preview, generated through WearCheck on {SHOWCASE[0].recordedAt.slice(0, 10)} in {SHOWCASE[0].latencySeconds} seconds. It is a recording, not a fresh call.
               </p>
+              <p className="photo-credit mt-4">{SHOWCASE[0].permission}</p>
+              <Link href="/demo#recorded" className="btn btn-quiet mt-4">More recorded results <ArrowIcon className="nudge size-4" /></Link>
             </div>
             <Compare originalUrl={SHOWCASE[0].originalSrc} previewUrl={SHOWCASE[0].previewSrc} previewAlt={`AI-generated preview: ${SHOWCASE[0].change}`} />
           </div>
