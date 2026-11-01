@@ -124,8 +124,8 @@ describe("F04 a positive verdict needs a visible outfit", () => {
   });
   it("distinguishes “nothing to check” from “checked and compatible”", () => {
     const none = assess(req("", { event_type: null }), obs([garment("dress", "navy"), shoes("flat")], { formality_impression: "unclear" }), {}, ALL);
-    expect(none.status).toBe("compatible");
-    expect(none.headline).toBe("No specific requirements to check against");
+    expect(none.status).toBe("no_requirements");
+    expect(none.headline).toBe("No specific requirements to check");
     const checked = assess(req("No boots"), obs([garment("dress", "navy"), shoes("flat")]), {}, ALL);
     expect(checked.headline).toBe("Looks compatible with the stated requirements");
   });
@@ -148,6 +148,48 @@ describe("model labels never override the quoted wording", () => {
     expect(rule.footwear_avoid).toContain("stiletto_heel");
     const r = assess({ ...fromExtraction(base), rules: [rule] }, obs([garment("suit", "brown"), shoes("loafer")]), {}, ALL);
     expect(r.clarification).toBeNull();
+  });
+});
+
+describe("cropped photos and missing requirements (November 2026 review)", () => {
+  const selfie = obs([{ ...garment("top", "grey", "grey t-shirt"), visibility: "partial" }], { full_body_visible: false, feet_visible: "no", formality_impression: "casual" });
+
+  it("a cropped selfie with zero requirements is not a compatibility verdict", () => {
+    const r = assess(req("", { event_type: "celebration" }), selfie, {}, ALL);
+    expect(r.status).toBe("no_requirements");
+    expect(r.headline).not.toMatch(/compatible/i);
+    expect(r.primary_action).toBeNull();
+    expect(r.photo_request).toMatch(/head-to-toe/);
+    expect(r.rows.shoes_venue.status).toBe("not_checked");
+    expect(Object.values(r.rows).map((x) => x.status)).not.toContain("no_issue");
+  });
+  it("a cropped selfie with a dress code is “not enough information”, and asks for a suitable photo", () => {
+    const r = assess(req("", { dress_code: "Formal" }), selfie, {}, ALL);
+    expect(r.status).toBe("insufficient");
+    expect(r.findings.some((f) => f.user_action === "retake_photo" && f.rank <= 5)).toBe(true);
+    expect(r.photo_request).toMatch(/head-to-toe/);
+    expect(r.primary_action).toBeNull(); // no preview until a suitable photo is supplied
+    expect(r.rows.shoes_venue.status).toBe("not_checked");
+  });
+  it("a cropped photo still checks what it can: a visible white top under “No white” is a conflict", () => {
+    const top = obs([garment("top", "white")], { full_body_visible: false, feet_visible: "no" });
+    const r = assess(req("No white"), top, {}, ALL);
+    expect(r.status).toBe("conflict");
+    expect(r.checks?.[0].result).toBe("issue");
+  });
+  it("lists exactly what was checked and what wasn't", () => {
+    const r = assess(req("No trainers; Avoid red", { dress_code: "Formal" }), obs([garment("suit", "brown"), garment("top", "white"), shoes("loafer")], { formality_impression: "formal" }), {}, ALL);
+    expect(r.status).toBe("compatible");
+    expect(r.checks?.map((c) => c.result)).toEqual(["ok", "ok", "ok"]);
+    const unclear = assess(req("", { dress_code: "Formal" }), obs([garment("suit", "brown"), shoes("loafer")], { formality_impression: "unclear" }), {}, ALL);
+    expect(unclear.status).toBe("insufficient"); // a requirement exists but nothing could be checked
+    expect(unclear.checks?.[0].result).toBe("not_checked");
+  });
+  it("says which try-ons the photo supports", () => {
+    const r = assess(req("", { event_type: "celebration" }), selfie, {}, ALL);
+    expect(r.photo_supports?.shoes.ok).toBe(false);
+    expect(r.photo_supports?.full_body.ok).toBe(false);
+    expect(r.photo_supports?.upper_body.ok).toBe(true);
   });
 });
 
