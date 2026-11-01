@@ -1,4 +1,4 @@
-import { RenderCategory, type ColourFamily, type FootwearStyle, type Requirements, type Finding, type Rule } from "./schemas";
+import { COLOUR_LABEL, FOOTWEAR_LABEL, RenderCategory, type ColourFamily, type FootwearStyle, type ObservedOutfit, type Requirements, type Finding, type Rule } from "./schemas";
 
 /**
  * Curated, licence-documented reference items (PRD §9). Files live in /public/reference with
@@ -257,16 +257,50 @@ export function optionsFor(finding: Pick<Finding, "render_category" | "rule_id">
       }
       if (!rule && req.venue.surface !== "unknown") return c.terrain_tags.includes(req.venue.surface) || c.terrain_tags.length === 0;
       return true;
-    })
-    .slice(0, 3);
+    });
 }
 
-/** Optional alternatives for a compatible outfit: allowed categories, never breaking a confirmed rule. */
-export function voluntaryOptions(req: Requirements, allowed: RenderCategory[]): CatalogueItem[] {
-  const picks: CatalogueItem[] = [];
-  for (const category of allowed) {
-    const probe = { rule_id: null, render_category: category };
-    picks.push(...optionsFor(probe, req).slice(0, 1));
-  }
-  return picks.slice(0, 3);
+export type RankedItem = { item: CatalogueItem; reasons: string[]; score: number };
+
+const FORMALITY_FOR: [RegExp, string][] = [[/black tie|white tie|formal|evening/, "formal"], [/cocktail/, "cocktail"], [/business|work|office/, "work"], [/smart/, "smart"]];
+
+/**
+ * Every eligible reference in one category, ranked by how well it fits the *confirmed requirements* and the
+ * *visible garment* it would replace, each with the reasons it's offered. Inputs are requirements and
+ * observed clothing attributes only — never gender, body or appearance.
+ */
+export function rankOptions(target: { render_category: RenderCategory; rule_id: string | null }, req: Requirements, observed?: ObservedOutfit): RankedItem[] {
+  const rule = target.rule_id ? req.rules.find((r) => r.id === target.rule_id) ?? null : null;
+  const code = req.dress_code && !req.dress_code.ambiguous ? req.dress_code.value.toLowerCase() : "";
+  const wantTag = FORMALITY_FOR.find(([re]) => re.test(code))?.[1] ?? null;
+  const requested = req.rules.filter((r) => r.type === "colour_request").flatMap((r) => r.colours);
+  const excluded = req.rules.filter((r) => r.type === "colour_exclusion").flatMap((r) => r.colours);
+  const footRules = req.rules.filter((r) => (r.type === "footwear_preference" || r.type === "footwear_requirement") && r.footwear_prefer.length);
+  const current = target.render_category === "shoes" ? null
+    : observed?.garments.find((g) => (target.render_category === "full_body" ? ["dress", "jumpsuit", "suit"] : target.render_category === "outer" ? ["outerwear"] : ["top", "suit"]).includes(g.category)) ?? null;
+  const quote = (r: Rule) => `“${r.evidence_text ?? r.summary}”`;
+
+  return optionsFor(target, req).map((item, order) => {
+    const reasons: string[] = [];
+    let score = -order * 0.01; // stable: catalogue order breaks ties
+    if (rule?.type === "colour_exclusion") { reasons.push(`Not ${rule.colours.map((c) => COLOUR_LABEL[c]).join(" or ")} — fits ${quote(rule)}`); score += 3; }
+    else if (excluded.length) { reasons.push(`Avoids the colours you were asked not to wear`); score += 1; }
+    for (const r of footRules) {
+      if (item.footwear_style && r.footwear_prefer.includes(item.footwear_style)) { reasons.push(`${FOOTWEAR_LABEL[item.footwear_style][0].toUpperCase()}${FOOTWEAR_LABEL[item.footwear_style].slice(1)} — fits ${quote(r)}`); score += r.id === rule?.id ? 3 : 2; }
+    }
+    if (rule && ["coverage", "garment_requirement", "garment_exclusion", "other"].includes(rule.type) && meetsRule(item, rule) === true) { reasons.push(`Meets ${quote(rule)}`); score += 3; }
+    const asked = item.colours.filter((c) => requested.includes(c));
+    if (asked.length) { reasons.push(`${COLOUR_LABEL[asked[0]][0].toUpperCase()}${COLOUR_LABEL[asked[0]].slice(1)}, a colour the event asks for`); score += 2; }
+    if (wantTag && item.formality_tags.includes(wantTag)) { reasons.push(`Suits the “${req.dress_code!.value}” dress code (WearCheck's tag: ${wantTag})`); score += 1; }
+    if (item.category === "shoes" && req.venue.surface !== "unknown" && item.terrain_tags.includes(req.venue.surface)) { reasons.push(`Practical on ${req.venue.surface.replace("_", " ")}`); score += 1; }
+    if (current && item.colours.includes(current.colour)) { reasons.push(`Same colour as your current ${current.category}, so the change may be subtle`); score -= 1; }
+    else if (current) { reasons.push(`Different from your current ${current.colour === "other" ? "" : `${COLOUR_LABEL[current.colour]} `}${current.category}`); score += 0.5; }
+    if (item.category === "shoes" && observed?.shoe_style && item.footwear_style === observed.shoe_style) { reasons.push("A similar style to the shoes you have"); score -= 1; }
+    if (!reasons.length) reasons.push("Doesn't break any of your confirmed requirements");
+    return { item, reasons, score };
+  }).sort((a, b) => b.score - a.score);
 }
+
+/** How many reference items exist in a category at all (to state plainly when the set is small). */
+export const catalogueCount = (category: RenderCategory) => CATALOGUE.filter((c) => c.enabled && c.category === category).length;
+
