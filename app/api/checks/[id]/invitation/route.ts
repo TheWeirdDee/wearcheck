@@ -27,7 +27,9 @@ export const POST = handler("invitation_upload", async (req: Request, ctx: { par
   try {
     await limit("vision", check.guest_session_id, "AI readings");
     await limit("visionGlobal", "global", "AI readings today");
-    const extraction = await extractInvitation(img.bytes);
+    const { value: extraction, model } = await extractInvitation(img.bytes);
+    // Record the model that actually served the request (it may be the free-tier fallback).
+    await db()`update wearcheck.event_sources set model_id = ${model} where id = ${src.id}`;
     if (!extraction.readable || extraction.full_text.trim().length < 3) {
       await db()`update wearcheck.event_sources set extraction_status = 'failed', extraction_error = 'UNREADABLE', extraction_json = ${db().json(extraction as never)} where id = ${src.id}`;
       throw new AppError("INVITATION_UNREADABLE", "We couldn't read text in that image. You can enter the details yourself instead.", 422, true, "ENTER_MANUALLY");
