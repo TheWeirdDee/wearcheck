@@ -28,14 +28,14 @@ const FAQ = [
     q: "What happens to my photos?",
     a: (
       <>
-        They&rsquo;re kept in private storage for this check and deleted automatically within about a day of it expiring 24 hours after you start, or straight away when you delete the check. Google Gemini reads them to describe the clothing; YouCam receives your photo only if you ask for a preview. The{" "}
+        They&rsquo;re kept in private storage for this check. It locks 24 hours after you start, and a daily cleanup then deletes it within the next 24 hours — or straight away when you delete the check yourself. Google Gemini reads them to describe the clothing; YouCam receives your photo only if you ask for a preview. The{" "}
         <Link href="/privacy" className="link">privacy page</Link> has the details.
       </>
     ),
   },
   {
     q: "Do I need an account?",
-    a: "No. A private browser session keeps your check for 24 hours. Nothing is published or shared unless you download the card and send it yourself.",
+    a: "No. A private browser session keeps your check open for 24 hours; after that it locks and is deleted within a day. Nothing is published or shared unless you download the card and send it yourself.",
   },
 ];
 
