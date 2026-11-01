@@ -53,6 +53,7 @@ export function SiteHeader({ variant = "site" }: { variant?: "site" | "workflow"
   }, [open]);
 
   return (
+    <>
     <header className="sticky top-0 z-40 border-b border-line bg-bg/95 backdrop-blur supports-[backdrop-filter]:bg-bg/85">
       <div className="mx-auto flex h-14 max-w-[1320px] items-center justify-between gap-3 px-4 sm:h-16 sm:px-6 lg:px-10">
         <Link href="/" className="font-display text-[1.15rem] font-bold tracking-tight sm:text-xl" aria-label="WearCheck home">
@@ -92,7 +93,9 @@ export function SiteHeader({ variant = "site" }: { variant?: "site" | "workflow"
           </button>
         </div>
       </div>
+    </header>
 
+      {/* Rendered outside <header>: its backdrop-filter would otherwise trap this fixed panel. */}
       {open ? (
         <div id="mobile-menu" ref={panelRef} className="fixed inset-x-0 top-14 bottom-0 z-50 overflow-y-auto bg-bg md:hidden" role="dialog" aria-modal="true" aria-label="Menu">
           <nav aria-label="Mobile" className="flex flex-col px-4 py-4">
@@ -107,6 +110,6 @@ export function SiteHeader({ variant = "site" }: { variant?: "site" | "workflow"
           </nav>
         </div>
       ) : null}
-    </header>
+    </>
   );
 }
