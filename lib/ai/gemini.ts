@@ -40,17 +40,31 @@ function jsonSchemaFor(schema: z.ZodType) {
   return stripUnsupported(z.toJSONSchema(schema, { target: "draft-2020-12" })) as Record<string, unknown>;
 }
 
-async function generate<T>(schema: z.ZodType<T>, system: string, image: Buffer, prompt: string, label: string): Promise<T> {
-  // Optional second free-tier model, used only when the primary model's free quota is exhausted.
-  // Both are free tier; nothing here ever switches to a paid service.
+export type Served<T> = { value: T; model: string };
+
+const isQuota = (e: unknown) => e instanceof ApiError && e.status === 429;
+const isBusy = (e: unknown) => !(e instanceof ApiError) || e.status >= 500; // 5xx "high demand" or a network failure
+
+/**
+ * One Gemini request with bounded, honest failure handling:
+ * - 429 (free-tier quota) on the primary model → try GEMINI_FALLBACK_MODEL once, if configured.
+ *   Free-tier quotas can be shared or exhausted together, so the fallback is a best effort, not extra
+ *   capacity; if it is also limited the user is told the free quota is used up.
+ * - 5xx / network ("high demand") → one retry on the same model, then the fallback, then "busy".
+ * - 400/403/404 → configuration problem; no retries.
+ * Returns the model that actually produced the result so callers can record it.
+ */
+async function generate<T>(schema: z.ZodType<T>, system: string, image: Buffer, prompt: string, label: string): Promise<Served<T>> {
   const fallback = env().GEMINI_FALLBACK_MODEL;
-  let model = modelId();
-  const call = () =>
+  const models = [modelId(), ...(fallback && fallback !== modelId() ? [fallback] : [])];
+  const call = (model: string) =>
     ai().models.generateContent({
       model,
       contents: [{ role: "user", parts: [{ inlineData: { mimeType: "image/jpeg", data: image.toString("base64") } }, { text: prompt }] }],
       config: {
-        systemInstruction: `${SAFETY_PREAMBLE}\n\n${system}`,
+        systemInstruction: `${SAFETY_PREAMBLE}
+
+${system}`,
         responseMimeType: "application/json",
         responseJsonSchema: jsonSchemaFor(schema),
         temperature: 0.1,
@@ -58,37 +72,44 @@ async function generate<T>(schema: z.ZodType<T>, system: string, image: Buffer, 
       },
     });
 
-  let res;
-  for (let attempt = 1; attempt <= 2; attempt++) {
-    try {
-      res = await call();
-      break;
-    } catch (e) {
-      const status = e instanceof ApiError ? e.status : 0;
-      if (status === 429) {
-        // Record which free-tier limit was hit (metric and model only; the message holds no user data).
-        const detail = e instanceof Error ? (e.message.match(/Quota exceeded for metric: [^,]+, limit: \d+, model: [\w.-]+/)?.[0] ?? e.message.slice(0, 160)) : "";
-        log.warn("gemini_quota", { label, status, model, detail });
-        if (fallback && model !== fallback) {
-          model = fallback;
-          attempt = 0; // the fallback model gets its own attempts
-          log.info("gemini_fallback_model", { label, model });
+  let res: Awaited<ReturnType<typeof call>> | undefined;
+  let served = "";
+  const failures: ("quota" | "busy")[] = [];
+  models: for (const model of models) {
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        res = await call(model);
+        served = model;
+        break models;
+      } catch (e) {
+        if (isQuota(e)) {
+          // Record which free-tier limit was hit (metric and model only; the message holds no user data).
+          const detail = e instanceof Error ? (e.message.match(/Quota exceeded for metric: [^,]+, limit: \d+, model: [\w.-]+/)?.[0] ?? e.message.slice(0, 160)) : "";
+          log.warn("gemini_quota", { label, model, detail });
+          failures.push("quota");
+          continue models;
+        }
+        if (isBusy(e)) {
+          log.warn("gemini_busy", { label, model, attempt, status: e instanceof ApiError ? e.status : "network" });
+          if (attempt === 2) {
+            failures.push("busy");
+            continue models;
+          }
+          await new Promise((r) => setTimeout(r, 1500));
           continue;
         }
-        throw new AppError("VISION_QUOTA", "Our free AI reading quota is used up for now. Please try again later, or enter the details yourself.", 429, true, "ENTER_MANUALLY");
-      }
-      if (status === 400 || status === 403 || status === 404) {
-        log.error("gemini_config", e);
+        log.error("gemini_config", e, { label, model });
         throw new AppError("VISION_UNAVAILABLE", "The AI reading service isn't available right now.", 503, true, "ENTER_MANUALLY");
       }
-      // Transient (5xx / network): one safe retry, results aren't persisted until validated.
-      if (attempt === 2) {
-        log.error("gemini_transient", e);
-        throw new AppError("VISION_TIMEOUT", "The AI reading service didn't respond. Please try again.", 503, true, "RETRY");
-      }
-      await new Promise((r) => setTimeout(r, 1500));
     }
   }
+  if (!res) {
+    if (failures.every((f) => f === "quota")) {
+      throw new AppError("VISION_QUOTA", "WearCheck's free AI reading allowance is used up for now. Please try again later, or enter the details yourself.", 429, true, "ENTER_MANUALLY");
+    }
+    throw new AppError("VISION_BUSY", "Google's AI service is busy right now. Please try again in a minute, or enter the details yourself.", 503, true, "RETRY");
+  }
+  if (served !== models[0]) log.info("gemini_fallback_served", { label, model: served });
   const text = res?.text ?? "";
   let parsed: unknown;
   try {
@@ -102,10 +123,10 @@ async function generate<T>(schema: z.ZodType<T>, system: string, image: Buffer, 
     log.warn("gemini_schema_mismatch", { label, issues: valid.error.issues.length });
     throw new AppError("VISION_MALFORMED", "We couldn't read a clear result from the image. Please try again or enter the details yourself.", 502, true, "ENTER_MANUALLY");
   }
-  return valid.data;
+  return { value: valid.data, model: served };
 }
 
-export async function extractInvitation(image: Buffer): Promise<InvitationExtraction> {
+export async function extractInvitation(image: Buffer): Promise<Served<InvitationExtraction>> {
   const system = `Task: read an event invitation, screenshot or message and extract dress-related requirements.
 Rules:
 - full_text: transcribe all legible text verbatim (max ~6000 chars). If unreadable, readable=false and full_text="".
@@ -120,7 +141,7 @@ Rules:
   return generate(InvitationExtraction, system, image, "Extract the dress-related requirements from this invitation.", "invitation");
 }
 
-export async function observeOutfit(image: Buffer, req: Requirements): Promise<OutfitObservation> {
+export async function observeOutfit(image: Buffer, req: Requirements): Promise<Served<OutfitObservation>> {
   const rulesForCheck = req.rules
     .filter((r) => ["garment_exclusion", "garment_requirement", "coverage", "other"].includes(r.type))
     .map((r) => ({ rule_id: r.id, rule: r.summary }));
