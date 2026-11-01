@@ -1,4 +1,4 @@
-import { RenderCategory, type ColourFamily, type FootwearStyle, type Requirements, type Finding } from "./schemas";
+import { RenderCategory, type ColourFamily, type FootwearStyle, type Requirements, type Finding, type Rule } from "./schemas";
 
 /**
  * Curated, licence-documented reference items (PRD §9). Files live in /public/reference with
@@ -13,6 +13,10 @@ export type CatalogueItem = {
   height: number;
   colours: ColourFamily[];
   footwear_style: FootwearStyle | null;
+  /** What the garment covers, for coverage and garment rules. Shoes leave this empty. */
+  covers: Coverage[];
+  /** Garment kinds this item counts as, for "no X" / "X required" rules. */
+  kinds: string[];
   tags: string[];
   formality_tags: string[];
   terrain_tags: string[];
@@ -27,6 +31,8 @@ export type CatalogueItem = {
   enabled: boolean;
 };
 
+export type Coverage = "shoulders" | "upper_arms" | "arms" | "knees" | "legs" | "chest";
+
 export const SHOPPING_DISCLAIMER = "Visual reference — not a live shopping listing";
 
 export const CATALOGUE: CatalogueItem[] = [
@@ -38,6 +44,8 @@ export const CATALOGUE: CatalogueItem[] = [
     width: 1400, height: 1050,
     colours: ["black"],
     footwear_style: "loafer",
+    covers: [],
+    kinds: ["loafer", "flat shoe", "closed toe"],
     tags: ["Flat", "Closed toe"],
     formality_tags: ["formal", "work", "smart"],
     terrain_tags: ["grass", "hard_floor", "gravel"],
@@ -57,6 +65,8 @@ export const CATALOGUE: CatalogueItem[] = [
     width: 1400, height: 1050,
     colours: ["brown"],
     footwear_style: "flat",
+    covers: [],
+    kinds: ["oxford", "lace-up", "flat shoe", "closed toe"],
     tags: ["Lace-up", "Low heel"],
     formality_tags: ["formal", "work", "smart"],
     terrain_tags: ["grass", "hard_floor", "gravel"],
@@ -76,6 +86,8 @@ export const CATALOGUE: CatalogueItem[] = [
     width: 1400, height: 1050,
     colours: ["beige"],
     footwear_style: "stiletto_heel",
+    covers: [],
+    kinds: ["heel", "court shoe", "pump", "closed toe"],
     tags: ["Pointed toe", "Slim heel"],
     formality_tags: ["formal", "cocktail"],
     terrain_tags: ["hard_floor"],
@@ -95,6 +107,8 @@ export const CATALOGUE: CatalogueItem[] = [
     width: 1400, height: 1050,
     colours: ["black"],
     footwear_style: "wedge",
+    covers: [],
+    kinds: ["wedge", "sandal", "open toe"],
     tags: ["Wedge sole", "Wide base"],
     formality_tags: ["formal", "cocktail"],
     terrain_tags: ["grass", "gravel"],
@@ -114,6 +128,8 @@ export const CATALOGUE: CatalogueItem[] = [
     width: 1400, height: 1400,
     colours: ["black"],
     footwear_style: "block_heel",
+    covers: [],
+    kinds: ["block heel", "court shoe", "closed toe"],
     tags: ["Low, wide heel", "Closed toe"],
     formality_tags: ["formal", "work"],
     terrain_tags: ["grass", "hard_floor"],
@@ -133,6 +149,8 @@ export const CATALOGUE: CatalogueItem[] = [
     width: 1400, height: 1400,
     colours: ["blue"],
     footwear_style: null,
+    covers: ["shoulders", "upper_arms", "arms", "chest"],
+    kinds: ["shirt", "top", "collared", "long sleeve", "button-down"],
     tags: ["Long sleeves", "Collared"],
     formality_tags: ["smart", "work", "formal"],
     terrain_tags: [],
@@ -152,6 +170,8 @@ export const CATALOGUE: CatalogueItem[] = [
     width: 1050, height: 1400,
     colours: ["black"],
     footwear_style: null,
+    covers: ["chest", "knees"],
+    kinds: ["dress", "sleeveless", "knee length"],
     tags: ["Knee length", "Sleeveless"],
     formality_tags: ["formal", "cocktail"],
     terrain_tags: [],
@@ -183,13 +203,51 @@ export function previewableCategories(): Record<RenderCategory, boolean> {
   return Object.fromEntries(RenderCategory.options.map((c) => [c, true])) as Record<RenderCategory, boolean>;
 }
 
-/** Filters to items that address the finding without breaking any other confirmed rule. Max 3. */
-export function optionsFor(finding: Finding, req: Requirements): CatalogueItem[] {
+const COVERAGE_WORDS: [RegExp, Coverage[]][] = [
+  [/\b(sleeves?|arms?)\b/, ["upper_arms"]],
+  [/\blong sleeves?\b/, ["arms"]],
+  [/\bshoulders?\b/, ["shoulders"]],
+  [/\bknees?\b/, ["knees"]],
+  [/\b(legs?|ankles?|floor[- ]length|full[- ]length)\b/, ["legs"]],
+  [/\b(chest|cleavage|neckline|low[- ]cut)\b/, ["chest"]],
+];
+
+/**
+ * Whether a reference item meets one non-colour, non-footwear rule. Only rules we can read mechanically
+ * (coverage words, "no <kind>" / "<kind> required") are decided; anything else is "unknown", and an
+ * unknown item is never offered as a correction for that rule.
+ */
+export function meetsRule(item: CatalogueItem, r: Rule): boolean | "unknown" {
+  const t = `${r.evidence_text ?? ""} ${r.summary}`.toLowerCase();
+  if (item.category === "shoes") return r.type === "coverage" || r.type === "garment_exclusion" || r.type === "garment_requirement" ? true : "unknown";
+  if (r.type === "coverage" || /\b(cover|covered|modest|sleeves?|shoulders?|knees?)\b/.test(t)) {
+    const needed = COVERAGE_WORDS.filter(([re]) => re.test(t)).flatMap(([, c]) => c);
+    if (!needed.length) return "unknown";
+    return needed.every((c) => item.covers.includes(c));
+  }
+  const negative = /\b(no|not|avoid|without|prohibited|banned)\b/.test(t);
+  const named = item.kinds.filter((k) => new RegExp(`\\b${k}s?\\b`).test(t));
+  if (r.type === "garment_exclusion" || (r.type === "other" && negative && named.length)) return named.length === 0 ? (r.type === "garment_exclusion" ? true : "unknown") : false;
+  if (r.type === "garment_requirement") return named.length > 0 ? true : "unknown";
+  return "unknown";
+}
+
+/**
+ * Filters to items that address the finding without breaking any other confirmed rule. Max 3.
+ * The finding's own rule must be positively met; other garment/coverage rules must not be broken.
+ * Used both to show options and to re-validate a render request on the server.
+ */
+export function optionsFor(finding: Pick<Finding, "render_category" | "rule_id">, req: Requirements): CatalogueItem[] {
   if (!finding.render_category) return [];
   const excluded = new Set(req.rules.filter((r) => r.type === "colour_exclusion").flatMap((r) => r.colours));
   const rule = finding.rule_id ? req.rules.find((r) => r.id === finding.rule_id) : null;
+  const garmentRules = req.rules.filter((r) => ["garment_exclusion", "garment_requirement", "coverage", "other"].includes(r.type));
   return CATALOGUE.filter((c) => c.enabled && c.category === finding.render_category)
     .filter((c) => !c.colours.some((col) => excluded.has(col)))
+    .filter((c) => garmentRules.every((r) => {
+      const ok = meetsRule(c, r);
+      return r === rule ? ok === true : ok !== false;
+    }))
     .filter((c) => {
       if (c.category !== "shoes" || !c.footwear_style) return true;
       const footRules = req.rules.filter((r) => r.type === "footwear_preference" || r.type === "footwear_requirement");
@@ -207,7 +265,7 @@ export function optionsFor(finding: Finding, req: Requirements): CatalogueItem[]
 export function voluntaryOptions(req: Requirements, allowed: RenderCategory[]): CatalogueItem[] {
   const picks: CatalogueItem[] = [];
   for (const category of allowed) {
-    const probe = { id: "voluntary", rule_id: null, render_category: category } as Finding;
+    const probe = { rule_id: null, render_category: category };
     picks.push(...optionsFor(probe, req).slice(0, 1));
   }
   return picks.slice(0, 3);
