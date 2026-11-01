@@ -216,15 +216,35 @@ export type Clarification = {
   options: { value: string; label: string }[];
 };
 
-export type AssessmentStatus = "compatible" | "consider_change" | "conflict" | "insufficient";
+/**
+ * - compatible: at least one requirement was checked and nothing conflicts
+ * - no_requirements: nothing specific was supplied, so compatibility wasn't assessed
+ * - insufficient: a requirement couldn't be checked from this photo (or needs an answer)
+ */
+export type AssessmentStatus = "compatible" | "consider_change" | "conflict" | "insufficient" | "no_requirements";
+export type RowStatus = "no_issue" | "needs_look" | "conflict" | "cant_assess" | "not_checked" | "not_required";
+
+/** One confirmed requirement and what happened to it: the "what was checked" list. */
+export type CheckLine = { label: string; source: EvidenceSource; result: "ok" | "issue" | "not_checked"; note: string };
+
+/** What the photo allows a try-on to replace (photo visibility plus provider input needs). */
+export type PhotoSupport = Record<RenderCategory, { ok: boolean; reason: string }>;
+
+/** The visible attributes used to rank alternatives — never gender or appearance. */
+export type ObservedOutfit = { garments: { category: string; colour: ColourFamily; description: string }[]; shoe_style: FootwearStyle | null };
 
 export type AssessmentResult = {
   status: AssessmentStatus;
   headline: string;
   key_finding_id: string | null;
   findings: Finding[];
-  rows: Record<FindingArea, { status: "no_issue" | "needs_look" | "conflict" | "cant_assess"; summary: string }>;
+  rows: Record<FindingArea, { status: RowStatus; summary: string }>;
   clarification: Clarification | null;
   shoes_assessable: boolean;
   primary_action: { finding_id: string; render_category: RenderCategory } | null;
+  // Added after the November 2026 audit; optional so earlier stored assessments still render.
+  checks?: CheckLine[];
+  photo_request?: string | null;
+  photo_supports?: PhotoSupport;
+  observed?: ObservedOutfit;
 };
