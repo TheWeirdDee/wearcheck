@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 
 /**
  * Original / AI preview comparison: a draggable slider (pointer + touch + keyboard) and an
- * independent two-button toggle for users who can't or don't want to drag.
+ * independent segmented toggle for users who can't or don't want to drag.
  */
 export function Compare({ originalUrl, previewUrl, previewAlt }: { originalUrl: string; previewUrl: string; previewAlt: string }) {
   const [mode, setMode] = useState<"slider" | "original" | "preview">("slider");
@@ -20,20 +20,38 @@ export function Compare({ originalUrl, previewUrl, previewAlt }: { originalUrl: 
 
   return (
     <div>
-      <div className="mb-3 flex flex-wrap items-center gap-2" role="group" aria-label="Comparison view">
-        {(["original", "preview", "slider"] as const).map((m) => (
-          <button key={m} type="button" aria-pressed={mode === m} onClick={() => setMode(m)}
-            className={`min-h-10 border px-3 text-sm font-semibold ${mode === m ? "border-ink bg-ink text-bg" : "border-line-strong"}`}>
+      <div className="mb-4 inline-flex border border-ink" role="group" aria-label="Comparison view">
+        {(["original", "slider", "preview"] as const).map((m) => (
+          <button
+            key={m}
+            type="button"
+            aria-pressed={mode === m}
+            onClick={() => setMode(m)}
+            className={`min-h-11 px-4 text-[0.9rem] font-semibold transition-colors ${mode === m ? "bg-ink text-bg" : "hover:bg-sunk"}`}
+          >
             {m === "original" ? "Original" : m === "preview" ? "AI preview" : "Compare"}
           </button>
         ))}
       </div>
 
-      <div ref={box} className="relative w-full select-none overflow-hidden border border-line bg-raised touch-pan-y"
-        onPointerDown={(e) => { if (mode !== "slider") return; dragging.current = true; (e.target as HTMLElement).setPointerCapture?.(e.pointerId); setFromX(e.clientX); }}
-        onPointerMove={(e) => { if (dragging.current) setFromX(e.clientX); }}
-        onPointerUp={() => { dragging.current = false; }}
-        onPointerCancel={() => { dragging.current = false; }}
+      <div
+        ref={box}
+        className="relative w-full select-none overflow-hidden bg-photo touch-pan-y"
+        onPointerDown={(e) => {
+          if (mode !== "slider") return;
+          dragging.current = true;
+          (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+          setFromX(e.clientX);
+        }}
+        onPointerMove={(e) => {
+          if (dragging.current) setFromX(e.clientX);
+        }}
+        onPointerUp={() => {
+          dragging.current = false;
+        }}
+        onPointerCancel={() => {
+          dragging.current = false;
+        }}
       >
         {/* Base layer: preview (or original in original-only mode) */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -44,20 +62,28 @@ export function Compare({ originalUrl, previewUrl, previewAlt }: { originalUrl: 
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={originalUrl} alt="" className="block max-h-[78vh] w-full object-contain" draggable={false} />
             </div>
-            <div className="pointer-events-none absolute inset-y-0 w-px bg-ink" style={{ left: `${pos}%` }} aria-hidden />
+            <div className="pointer-events-none absolute inset-y-0 w-0.5 -translate-x-1/2 bg-bg" style={{ left: `${pos}%` }} aria-hidden>
+              <span className="absolute top-1/2 left-1/2 flex size-11 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-bg text-ink shadow-[0_6px_20px_-8px_rgba(0,0,0,0.6)]">
+                <svg viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l-6 6 6 6M15 6l6 6-6 6" /></svg>
+              </span>
+            </div>
             <input
-              type="range" min={0} max={100} step={1} value={Math.round(pos)}
+              type="range"
+              min={0}
+              max={100}
+              step={1}
+              value={Math.round(pos)}
               onChange={(e) => setPos(Number(e.target.value))}
               aria-label="Comparison slider: left shows the original photo, right shows the AI preview"
               aria-valuetext={`${Math.round(pos)}% original`}
-              className="absolute inset-x-0 bottom-3 mx-auto w-[85%] accent-[var(--ink)]"
+              className="absolute inset-x-0 bottom-4 mx-auto w-[80%] accent-[var(--ink)]"
             />
           </>
         ) : null}
-        <span className="absolute left-2 top-2 bg-bg px-2 py-1 text-[0.7rem] font-bold uppercase tracking-[0.1em]">{mode === "preview" ? "" : "Original"}</span>
-        {mode !== "original" ? <span className="ai-label absolute right-2 top-2">AI preview</span> : null}
+        {mode !== "preview" ? <span className="absolute left-3 top-3 bg-bg px-2.5 py-1 text-[0.75rem] font-bold uppercase tracking-[0.08em]">Original</span> : null}
+        {mode !== "original" ? <span className="ai-label absolute right-3 top-3">AI preview</span> : null}
       </div>
-      <p className="mt-2 text-xs text-muted">AI-generated by YouCam. It may alter details and isn&rsquo;t proof of fit, size or comfort.</p>
+      <p className="photo-credit mt-3">AI-generated by YouCam. It may alter details and isn&rsquo;t proof of fit, size or comfort.</p>
     </div>
   );
 }
