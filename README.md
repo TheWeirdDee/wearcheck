@@ -7,7 +7,8 @@ WearCheck reads an invitation (or details you type), asks you to confirm the eve
 It is not a styling chatbot, an attractiveness score, an outfit generator or a shop.
 
 - **Live app:** https://wearcheck.vercel.app
-- **Repository:** https://github.com/TheWeirdDee/wearcheck — implementation on branch `feat/wearcheck-implementation` (not merged to `main`)
+- **Repository:** https://github.com/TheWeirdDee/wearcheck — the implementation is on branch [`feat/wearcheck-implementation`](https://github.com/TheWeirdDee/wearcheck/tree/feat/wearcheck-implementation). `main` still holds only the initial README; merging needs the owner's go-ahead.
+- **Licence:** MIT for the source ([LICENSE](LICENSE)); images carry their own licences (see *Assets and licences*)
 - **Product spec:** [`WearCheck_Full_PRD_v1.md`](WearCheck_Full_PRD_v1.md)
 
 ---
@@ -26,19 +27,45 @@ What has and hasn't been demonstrated, kept deliberately separate. "Implemented"
 | Outfit photo → **real Gemini** observation → rule-based assessment → keep → decision card PNG | ✓ | ✓ | ✓ (permissioned owner photo, `live pipeline` e2e) |
 | Delete a check (database rows + stored files), and access revoked afterwards | ✓ | ✓ | ✓ (e2e) |
 | Scheduled retention cleanup endpoint (secret-protected) | ✓ | ✓ | ✓ (401 without the secret, 200 with it) |
-| **YouCam Clothes V4** render, through the UI | ✓ | ✓ 4 runs (blue shirt, black dress, retired navy dress ×2), 16–24 s | ✓ 2 runs (blue shirt, retired navy dress), 17–18 s |
-| **YouCam Shoes V3** render, through the UI | ✓ | ✓ 2 runs (wedge, loafer), 24–26 s | ✓ 4 runs (wedge, loafer, oxford pair ×2), 17–18 s |
+| **YouCam Clothes V4** render, through the UI | ✓ | ✓ 4 runs (blue shirt, black dress, retired navy dress ×2), 16–24 s | ✓ blue shirt, retired navy dress; 6 runs on 1 Nov after the audit fixes, 19–58 s |
+| **YouCam Shoes V3** render, through the UI | ✓ | ✓ 2 runs (wedge, loafer), 24–26 s | ✓ wedge, loafer, tan oxford; 5 runs on 1 Nov after the audit fixes, 18–30 s |
 | Reload mid-render resumes the same job, with no duplicate provider task | ✓ | ✓ | ✓ |
 | Stale-revision handling for renders | ✓ | Unit-level only | ✗ |
+| Comparison fits the viewport (feet included), toggle, slider, zoom to the changed area | ✓ | ✓ | ✓ e2e on desktop and mobile (recorded outputs) and in both live render journeys |
+| Requirement polarity, multi-garment colour rules, rule-aware references, visibility gate (audit F01–F04) | ✓ | ✓ 32 regression tests (`tests/unit/audit-regressions.test.ts`) | ✓ live: “Please avoid white or ivory” flagged a white shirt under a vest |
+| Atomic render admission, unknown-submission state, orphan-safe storage, CSP (audit R01–R04) | ✓ | Type-checked; not fault- or concurrency-tested | CSP header ✓; the others not exercised live (no deliberate paid races) |
 | Gemini fallback model on quota errors; honest "quota used up" vs "busy" messages | ✓ | ✓ deterministic tests (`tests/unit/gemini.test.ts`) | Not observed live (no live quota was exhausted on purpose) |
 | Serving Gemini model recorded per request (`event_sources.model_id`, `outfit_observations.model_id`) | ✓ | ✓ | ✓ |
 | Retention cleanup removes expired records **and stored files** | ✓ | — | ✓ production cron endpoint, labelled expired test records (`scripts/retention-test.mts`) |
 
-**YouCam evidence (2026-11-01).** 12 real renders ran through the WearCheck UI: 6 Clothes V4 and 6 Shoes V3, 6 locally and 6 on the live site. Each went example or invitation → photo with consent → real Gemini findings → one reference item → Generate → page reload mid-task → completed image displayed in the comparison view.
+**YouCam evidence (2026-11-01).** The usage ledger records **25 completed renders** — 13 Clothes V4 and 12 Shoes V3, latencies 15–58 s — all started through the WearCheck UI, locally or on the live site. Each went invitation or event details → photo with consent → real Gemini findings → one reference item → Generate → completed image displayed in the comparison view.
 - Every job created exactly one provider task (`/s2s/v2.0/task/cloth-v4` or `/s2s/v2.0/task/shoes-transfer`, polled until `success`).
-- The balance went from 1,040 to 1,016 units: **2 units per render**, measured before and after.
-- **Photos used:** the project owner's photos, for private testing only (never published), and one CC0 photograph for the public showcase and the demo video ([docs/public-assets.md](docs/public-assets.md)).
+- The balance went from 1,040 to 990 units: **2 units per render**, measured before and after.
+- **Photos used:** the project owner's photo (private testing, and — with their permission — the demo video), and one CC0 photograph for the public showcase ([docs/public-assets.md](docs/public-assets.md)).
 - Task IDs, timestamps and latencies are kept privately in the usage ledger and `private-ops/`.
+
+**Final hosted verification** (commit `0088ef2`, 2026-11-01 17:40 UTC): 40 passed, 4 skipped. The skips are the mobile-menu test on desktop, the pinned story on mobile, and the two paid render journeys on mobile (run once, on desktop, to bound spend; the comparison controls are tested on mobile with recorded outputs).
+
+### Independent audit (1 November 2026) — what changed
+
+| Finding | Fix | Evidence |
+|---|---|---|
+| F01 “No flats / wedges / boots / trainers” passed or reversed | Polarity is kept per clause; plurals and synonyms are normalised; a prohibition is a hard rule; an unrecognised style becomes a question. Invitation rules are re-read from their quoted wording, so the model's labels can't flip them | Regression tests; the live run turned the model's “colour request” for “Please avoid white or ivory” into an exclusion |
+| F02 Colour rules checked only one garment | Every visible garment is checked; several matches are named, and the preview note says the others would stay. Previews and cards say WearCheck doesn't re-check the generated image | Tests; live finding “Your photo shows a white top.” for a white shirt under a vest |
+| F03 References could break the rule they fix | Items carry coverage and garment kinds; the finding's own rule must be positively met, and unknown suitability is rejected. The server re-validates the item on Generate | Tests (the sleeveless dress is never offered for “Sleeves required”) |
+| F04 Unclear photo could pass | No visible garments or a poor photo means “Not enough information”; “nothing to check” has its own headline | Tests; live no-change run shows “No specific requirements to check against” |
+| F05 Video didn't show the change | New 180-second video, with full-body comparisons and zooms on the changed shirt and shoes | `docs/demo-script.md` |
+| F06 Narrow catalogue cards | The occasion sidebar appears only from 1280 px; card columns follow the available width (min 15 rem) | e2e asserts cards ≥ 200 px wide |
+| F07 Feet below the viewport | The frame is sized to the viewport, scrolled into view on completion, with a synchronized zoom to the area where the images differ | e2e asserts the whole frame is on screen and the zoom engages |
+| F08 False-green tests | The no-change and render journeys fail when their preconditions aren't met; the card's PNG size is checked; there's a mobile comparison test without provider calls | `tests/e2e/*.spec.ts` |
+| F09 Default branch, no licence | MIT licence added; the README and submission link the implementation branch | Merge to `main` is waiting on the owner |
+| F10 Inconsistent retention copy | Everywhere: locks after 24 hours, deleted by the daily cleanup normally within the next 24 hours | Pages updated; privacy page gives the schedule |
+| R01 Non-atomic admission | Active-job, spend-cap checks and insert run in one transaction under an advisory lock; rate limits likewise | Type-checked; not race-tested live |
+| R02 Lost createTask response | A durable marker before task creation; a lost reply or crash there is reported as “outcome unknown”, with a warning that retrying is a new paid preview | Type-checked; not fault-injected |
+| R03 Orphaned images | The asset row is written only for a live check, the object is removed if the insert fails, and deletion sweeps the check's own storage prefix | Type-checked; retention test still passes its earlier run |
+| R04 No CSP | A first-party Content-Security-Policy | Live header; full suite passes with it |
+
+Found and fixed while verifying: Gemini calls now share one 48-second budget, so a slow model returns “busy, try again” instead of a platform 504; footwear suggestions keep their styles; an unnamed shoe style is described against the recommended ones; and the card footer no longer overlaps its timestamp.
 
 ---
 
@@ -162,13 +189,14 @@ Deployment: Vercel project `wearcheck`. Deploy with `vercel deploy --prod --buil
 
 - **No accounts.** A random token in an HTTP-only cookie (`__Host-wc_guest` over HTTPS) identifies the browser. The database stores only its SHA-256 hash.
 - **Ownership on every request:** a check ID alone opens nothing.
-- **Retention:** a check expires 24 hours after it starts. Cleanup runs daily, and opportunistically as people use the app, deleting files and rows, normally within a day of expiry. A small usage ledger (provider, feature, task reference, status, timing; no images or text) is kept for budget control.
+- **Retention:** a check locks 24 hours after it starts. A cleanup that runs daily at 04:17 UTC (and on a few expired checks whenever a new check starts) then deletes its files and rows, normally within 24 hours of expiry. A small usage ledger (provider, feature, task reference, status, timing; no images or text) is kept for budget control.
 - **Deletion:** access is blocked first, then storage objects are removed, then rows. Copies held by Google or YouCam follow their own policies, and WearCheck does not claim to delete them.
 - **Retention verified:** `scripts/retention-test.mts` seeds labelled, already-expired test records (`demo_case = 'retention-test'`) with real stored files, calls the production cleanup endpoint, and checks the outcome. It refuses to run if any other check is expired. On 2026-11-01 it observed rows and sessions removed and the bucket listing empty immediately. Downloads by the server could still return a **cached copy for 35–68 seconds**; no user-facing route can reach it, because access is revoked first. The privacy page discloses this.
 - **Gemini free tier:** Google's unpaid terms allow submitted content to be used to improve its services. The privacy page says so. A 429 on the primary model triggers one attempt on `GEMINI_FALLBACK_MODEL` (also free tier). Free-tier limits can run out together, so this is a best effort, not extra capacity. If every model is limited, people are told the free allowance is used up and offered manual entry. Persistent 5xx "high demand" errors produce a "busy, try again" message instead. Nothing switches to a paid model.
-- **YouCam spend:** jobs are idempotent with a single active job per check, per-session and global daily caps apply, and nothing is retried automatically. "Cancel waiting" stops polling only; it is not claimed to stop provider billing.
+- **YouCam spend:** jobs are idempotent, with a single active job per check. Admission is atomic, per-session and global daily caps apply, and nothing is retried automatically. A task whose creation response was lost is reported as "outcome unknown", never as "nothing generated". "Cancel waiting" stops polling only; it is not claimed to stop provider billing.
 - **SSRF:** provider downloads are limited to HTTPS on allow-listed YouCam/AWS hosts, with no redirects and with size caps.
 - **Logs** redact URLs, tokens and connection strings, and never record image or invitation contents.
+- **Content-Security-Policy:** first-party only (`default-src 'self'`; inline scripts allowed for Next's bootstrap; no framing).
 
 ## Assets and licences
 
@@ -186,7 +214,9 @@ Deployment: Vercel project `wearcheck`. Deploy with `vercel deploy --prod --buil
 ## Known limitations
 
 - **Public showcase basis:** it uses a CC0 photograph. That settles copyright but not a model release (see [docs/public-assets.md](docs/public-assets.md)).
-- **Shirt preview limit:** the recorded garment preview replaced the overshirt but left the white T-shirt underneath visible. Previews show the idea of a change, not a guaranteed fix.
+- **Previews aren't re-checked:** WearCheck doesn't re-observe the generated image. The public shirt preview left a white T-shirt visible; in the demo, the shirt replaced the white shirt but also the vest and tie. The preview page and card tell people what to look for.
+- **Gemini variance:** the same photo was read as loafers in one run and as "not flats or wedges" in another. That's why every finding shows its source, and people can correct details.
+- **Not exercised live:** concurrent render admission, a lost YouCam response during task creation, and an asset save racing a deletion. These are handled in code but not fault- or race-tested against the paid provider.
 - **Gemini free-tier capacity is small:** the served model allows 5 requests per minute and **20 per day** (observed 429: `generate_content_free_tier_requests, limit: 20, model: gemini-3.6-flash`). The optional `GEMINI_FALLBACK_MODEL` (`gemini-3.1-flash-lite`, also free tier) is tried only after a 429; it is a lighter model, so its observations may be less precise. When both are exhausted, users get the manual-entry fallback. Google also returns occasional 503 "high demand" errors, which the app retries once before showing "Try again".
 - The editorial set comes from mixed lifestyle shoots rather than a controlled studio session. A shared crop and colour grade bring it closer together, but a commissioned or licensed studio set would be better. Gemini image generation, which could have produced one, is not available on this free tier (429 on every image model).
 - The reference catalogue is small: one top, one dress, five shoes, and no outer layer. Other items can be uploaded.
@@ -195,17 +225,18 @@ Deployment: Vercel project `wearcheck`. Deploy with `vercel deploy --prod --buil
 
 ## Demo video
 
-- **File:** `private-ops/video/wearcheck-demo-120s.mp4`. It is git-ignored and **not uploaded anywhere**.
-- **Format:** exactly 120.00 s, 1280×720 H.264 with AAC audio, burned-in captions and a synthesised voiceover (Windows SAPI "Zira").
-- **Content:** recorded from https://wearcheck.vercel.app with `scripts/demo-record.mjs`: sample invitation → real Gemini reading → CC0 photo → findings → one shoe → a **real YouCam Shoes V3 render** → comparison → decision card. Cut with `scripts/demo-edit.mjs`.
-- **Time compression:** only the three provider waits are sped up, each with an on-screen note giving the real duration (Gemini ×1.2 of 8.2 s, Gemini ×2.3 of 7.0 s, YouCam ×3.5 of 18.2 s).
-- **On-screen disclosures:** the sample invitation is labelled as created for the demo, and the photo is credited with a note that the person shown has not reviewed the preview.
+- **File:** `private-ops/video/wearcheck-demo-180s.mp4`, git-ignored and **not uploaded anywhere**. It replaces the 120-second version.
+- **Format:** exactly 180.00 s, 1920×1080 H.264 with AAC audio, burned-in captions and a synthesised voiceover (Windows SAPI "Zira").
+- **Content:** recorded from https://wearcheck.vercel.app: sample invitation → Gemini reading → confirmation → the owner's photo with consent → "Your photo shows a white top." → **real Clothes V4** render (blue shirt) → comparison and zoom → the shoe finding → **real Shoes V3** render (tan oxford) → comparison and zoom → decision → downloaded card opened → a separate no-change check → the mobile comparison.
+- **Disclosures:** each provider wait is sped up with its real duration on screen (Gemini 15.1 s, 9.6 s and 8.6 s; YouCam 33.4 s and 23.8 s, including uploads). Jump cuts are flagged, the sample invitation and the photo's permission are labelled, and two scenes are marked as coming from a second take.
+- **Script, cut list and method:** [docs/demo-script.md](docs/demo-script.md); `scripts/demo-record.mjs`, `scripts/demo-edit.mjs`, `scripts/demo-scenes.json`.
 
 ## Remaining manual actions
 
-1. **Decide whether CC0 without a model release is acceptable** for the public showcase and video ([docs/public-assets.md](docs/public-assets.md)). If not, supply a photo with written consent to processing and publication, then re-run `scripts/demo-record.mjs` and `scripts/demo-edit.mjs`.
-2. **Authorise submission** to Devpost and any upload of the video. Neither has been done.
-3. **Delete the remaining private test checks now, if wanted.** An automatic review rejected a bulk deletion; see below. Otherwise they expire within 24 hours and the scheduled cleanup removes them.
+1. **Review the 180-second video**, then authorise submission and any upload. Neither has been done.
+2. **Merge `feat/wearcheck-implementation` into `main`** (or make it the default branch) if judges should land on the app. This wasn't done without your go-ahead.
+3. **Decide whether CC0 without a model release is acceptable** for the site's public showcase ([docs/public-assets.md](docs/public-assets.md)). The video now uses your own photo instead.
+4. **Delete the remaining private test checks now, if wanted.** An automatic review rejected a bulk deletion; see below. Otherwise they expire within 24 hours and the scheduled cleanup removes them.
 
 ## Rejected bulk deletion (preserved, not bypassed)
 
