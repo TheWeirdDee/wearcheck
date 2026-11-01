@@ -190,7 +190,7 @@ export function assess(
       const hard = (r.type === "footwear_requirement" || avoided) && r.severity === "hard" && r.source !== "suggested" && (shoesItem?.visibility === "clear" || Boolean(corr.footwear_style));
       findings.push({
         id: id(), rule_id: r.id, area: "shoes_venue", kind: hard ? "explicit_rule" : "explicit_preference", status: hard ? "conflict" : "consider_change",
-        observation: `Your shoes appear to be ${FOOTWEAR_LABEL[style]}.`,
+        observation: style === "other" ? `Your shoes don't appear to be ${r.footwear_prefer.length ? r.footwear_prefer.filter((s) => s !== "flat_sandal" && s !== "loafer").map((s) => FOOTWEAR_LABEL[s]).join(" or ") : "an allowed style"}.` : `Your shoes appear to be ${FOOTWEAR_LABEL[style]}.`,
         reason: `${r.source === "invitation" ? `The invitation ${hard ? "requires" : "recommends"}` : `Your notes ${hard ? "require" : "recommend"}`}: “${r.evidence_text ?? r.summary}”.${outdoorsSoft ? " The venue is outdoors on a soft surface." : ""}`,
         evidence_text: r.evidence_text, evidence_source: corr.footwear_style ? "user_correction" : sourceLabel(r),
         uncertainty: shoesItem?.visibility === "clear" ? null : "Shoe style judged from a partial view.",
