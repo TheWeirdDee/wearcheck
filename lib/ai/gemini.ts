@@ -41,9 +41,13 @@ function jsonSchemaFor(schema: z.ZodType) {
 }
 
 async function generate<T>(schema: z.ZodType<T>, system: string, image: Buffer, prompt: string, label: string): Promise<T> {
+  // Optional second free-tier model, used only when the primary model's free quota is exhausted.
+  // Both are free tier; nothing here ever switches to a paid service.
+  const fallback = env().GEMINI_FALLBACK_MODEL;
+  let model = modelId();
   const call = () =>
     ai().models.generateContent({
-      model: modelId(),
+      model,
       contents: [{ role: "user", parts: [{ inlineData: { mimeType: "image/jpeg", data: image.toString("base64") } }, { text: prompt }] }],
       config: {
         systemInstruction: `${SAFETY_PREAMBLE}\n\n${system}`,
@@ -64,7 +68,13 @@ async function generate<T>(schema: z.ZodType<T>, system: string, image: Buffer, 
       if (status === 429) {
         // Record which free-tier limit was hit (metric and model only; the message holds no user data).
         const detail = e instanceof Error ? (e.message.match(/Quota exceeded for metric: [^,]+, limit: \d+, model: [\w.-]+/)?.[0] ?? e.message.slice(0, 160)) : "";
-        log.warn("gemini_quota", { label, status, detail });
+        log.warn("gemini_quota", { label, status, model, detail });
+        if (fallback && model !== fallback) {
+          model = fallback;
+          attempt = 0; // the fallback model gets its own attempts
+          log.info("gemini_fallback_model", { label, model });
+          continue;
+        }
         throw new AppError("VISION_QUOTA", "Our free AI reading quota is used up for now. Please try again later, or enter the details yourself.", 429, true, "ENTER_MANUALLY");
       }
       if (status === 400 || status === 403 || status === 404) {
