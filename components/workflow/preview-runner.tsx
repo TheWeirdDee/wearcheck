@@ -111,8 +111,11 @@ export function PreviewRunner({ checkId, initialJob, originalUrl, item, unresolv
   const failed = job.status === "failed" || job.status === "expired";
 
   // Bring the whole comparison (controls and full-length photo) into view once the result is in.
+  // Instant, and after the entrance animation, so it can't stop short of the controls.
   useEffect(() => {
-    if (done) result.current?.scrollIntoView({ block: "start", behavior: initiallyDone ? "auto" : "smooth" });
+    if (!done) return;
+    const t = setTimeout(() => result.current?.scrollIntoView({ block: "start", behavior: "auto" }), initiallyDone ? 50 : 650);
+    return () => clearTimeout(t);
   }, [done, initiallyDone]);
 
   return (
@@ -124,13 +127,12 @@ export function PreviewRunner({ checkId, initialJob, originalUrl, item, unresolv
       {done ? (
         <MotionConfig reducedMotion="user">
         <motion.div
-          ref={result}
-          className="mt-6 grid scroll-mt-[5.5rem] gap-8 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] lg:gap-10"
+          className="mt-6 grid gap-8 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] lg:gap-10"
           initial={initiallyDone ? false : { opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
         >
-          <Compare originalUrl={originalUrl} previewUrl={job.resultUrl!} previewAlt={`AI-generated preview with ${item.title}`} />
+          <div ref={result} className="scroll-mt-[4.75rem]"><Compare originalUrl={originalUrl} previewUrl={job.resultUrl!} previewAlt={`AI-generated preview with ${item.title}`} /></div>
           <div>
             <h2 className="t-3">{item.title}</h2>
             <p className="mt-2 text-ink-2">{item.reason}</p>
