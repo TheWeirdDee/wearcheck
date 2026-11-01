@@ -175,7 +175,7 @@ export default function HelpPage() {
                 { q: "The invitation couldn't be read", a: "The vision service may be busy or at its free-tier limit. Your upload isn't lost — type the details instead, or try again in a few minutes." },
                 { q: "The preview is taking a long time", a: "After a few minutes it's marked as delayed but keeps running. You can stop waiting and resume later from the same check. After 20 minutes it's treated as failed." },
                 { q: "The preview failed", a: "You'll see the reason — for example the photo shows more than one person, or the feet aren't visible for a shoe preview. Fix the photo or choose another item, then try again when you're ready." },
-                { q: "I can't open my check", a: "Checks belong to the browser that created them and expire 24 hours after you start. If it was deleted or has expired, start a new one." },
+                { q: "I can't open my check", a: "Checks belong to the browser that created them and lock 24 hours after you start; a daily cleanup then deletes them. If it was deleted or has expired, start a new one." },
                 { q: "Can it tell me my size, or if shoes will be comfortable?", a: "No. It can't measure fit, sizing, comfort, stability or suitability for terrain." },
               ]}
             />
