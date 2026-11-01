@@ -1,0 +1,250 @@
+"use client";
+
+import gsap from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
+import Image from "next/image";
+import { useEffect, useRef, useState } from "react";
+import { EDITORIAL } from "@/lib/editorial";
+import { ArrowIcon, BackIcon, CheckIcon } from "../icons";
+
+const refresh = () => ScrollTrigger.refresh();
+
+function Finding({ tone, label, children }: { tone: "ok" | "ask"; label: string; children: React.ReactNode }) {
+  return (
+    <div className="note max-w-[22rem] text-[0.95rem] leading-snug">
+      <p className={`flex items-center gap-2 text-[0.8125rem] font-semibold uppercase tracking-[0.06em] ${tone === "ok" ? "text-ok" : "text-warn"}`}>
+        {tone === "ok" ? <CheckIcon className="size-4" /> : <span aria-hidden className="inline-flex size-4 items-center justify-center rounded-full border border-current text-[0.65rem]">?</span>}
+        {label}
+      </p>
+      <div className="mt-1.5">{children}</div>
+    </div>
+  );
+}
+
+const PANELS: { kicker: string; title: string; body: string; visual: React.ReactNode }[] = [
+  {
+    kicker: "The occasion",
+    title: "It starts with what the invitation actually says.",
+    body: "Upload the invitation or type the details. WearCheck quotes the exact wording it finds and asks you to confirm each requirement before anything is judged. Anything it infers is marked as a suggestion.",
+    visual: (
+      <div className="relative h-full min-h-[22rem] bg-photo">
+        <Image src={EDITORIAL.colonnade.src} alt={EDITORIAL.colonnade.alt} fill sizes="(min-width: 1024px) 55vw, 86vw" className="object-cover" onLoad={refresh} />
+        <div className="absolute inset-x-4 bottom-4 sm:inset-x-auto sm:left-6 sm:bottom-6 sm:w-[19rem]">
+          <div className="note">
+            <p className="text-[0.75rem] font-semibold uppercase tracking-[0.08em] text-muted">Sample invitation</p>
+            <p className="mt-2 font-display text-xl font-semibold leading-tight">Ana &amp; Joe · Saturday, 3 pm</p>
+            <ul className="mt-3 space-y-1.5 text-[0.95rem]">
+              <li>Garden ceremony on the lawn</li>
+              <li>Dress code: Formal</li>
+              <li className="bg-accent-soft px-1 -mx-1">Flats or wedges recommended</li>
+              <li className="bg-accent-soft px-1 -mx-1">Please avoid white or ivory</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    ),
+  },
+  {
+    kicker: "Your outfit",
+    title: "Then, the outfit you were already planning to wear.",
+    body: "One photo of one adult, taken with their consent. WearCheck describes the garments it can see — and says plainly what is out of frame or too dark to judge.",
+    visual: (
+      <div className="relative h-full min-h-[22rem] bg-photo">
+        <Image src={EDITORIAL.jumpsuit.src} alt={EDITORIAL.jumpsuit.alt} fill sizes="(min-width: 1024px) 55vw, 86vw" className="object-cover object-top" onLoad={refresh} />
+        <p className="absolute left-4 top-4 bg-bg/90 px-2.5 py-1.5 text-[0.8125rem] font-semibold sm:left-6 sm:top-6">Seen: teal halter jumpsuit · Not seen: shoes</p>
+      </div>
+    ),
+  },
+  {
+    kicker: "The finding",
+    title: "Every finding names the requirement behind it.",
+    body: "Where the photo clearly answers a requirement, you see which one. Where it can't — feet out of frame, colour in dim light, a vague dress code — WearCheck asks one specific question instead of guessing.",
+    visual: (
+      <div className="relative h-full min-h-[24rem] bg-photo">
+        <Image src={EDITORIAL.jumpsuit.src} alt="" fill sizes="(min-width: 1024px) 55vw, 86vw" className="object-cover object-[50%_20%] opacity-80" onLoad={refresh} />
+        <div className="absolute inset-x-4 top-4 flex flex-col gap-3 sm:inset-x-auto sm:left-6 sm:top-6">
+          <Finding tone="ok" label="Colour matches">
+            Teal is not white or ivory. <span className="text-muted">From the invitation: “Please avoid white or ivory.”</span>
+          </Finding>
+          <Finding tone="ask" label="Can't check shoes">
+            Feet aren&rsquo;t in this photo, so “Flats or wedges recommended” can&rsquo;t be checked. Add a full-length photo, or tell us what you&rsquo;ll wear.
+          </Finding>
+        </div>
+      </div>
+    ),
+  },
+  {
+    kicker: "The decision",
+    title: "Keep it — or preview one justified change.",
+    body: "If nothing conflicts, keeping your outfit is the result: no render, nothing to buy. If one item is the problem, choose a single alternative and YouCam renders it onto your own photo, so you can compare before you decide.",
+    visual: (
+      <div className="flex h-full min-h-[24rem] items-center justify-center bg-stone p-5 sm:p-8">
+        <div className="grid w-full max-w-[30rem] grid-cols-[38%_1fr] gap-4 bg-raised p-4 shadow-[0_30px_60px_-40px_rgba(0,0,0,0.5)] sm:gap-5 sm:p-5">
+          <div className="relative aspect-[4/5] bg-photo">
+            <Image src={EDITORIAL.jumpsuit.src} alt="" fill sizes="200px" className="object-cover object-top" onLoad={refresh} />
+          </div>
+          <div className="flex min-w-0 flex-col">
+            <p className="text-[0.75rem] font-semibold uppercase tracking-[0.08em] text-muted">Decision card</p>
+            <p className="mt-2 font-display text-[1.6rem] font-semibold leading-[1.05] tracking-[-0.03em]">Keep your outfit.</p>
+            <ul className="mt-3 space-y-1.5 border-t border-line pt-3 text-[0.9rem] leading-snug">
+              <li className="flex gap-2"><CheckIcon className="mt-0.5 size-4 flex-none text-ok" /> Colour fits the request</li>
+              <li className="flex gap-2"><span aria-hidden className="mt-0.5 w-4 flex-none text-center text-warn">?</span> Shoes: you confirmed wedges</li>
+            </ul>
+            <p className="mt-auto pt-3 text-[0.8rem] leading-snug text-muted">Style guidance — not organiser approval or a guarantee of fit.</p>
+          </div>
+        </div>
+      </div>
+    ),
+  },
+];
+
+/**
+ * "How it works" as a horizontal image sequence.
+ * Wide screens with motion allowed: the section pins and vertical scrolling moves the panels sideways
+ * (travel measured from the real track width, recalculated on resize and image load).
+ * Everywhere else: a native, swipeable scroll-snap row with previous/next controls.
+ */
+export function Story() {
+  const sectionRef = useRef<HTMLElement>(null);
+  const trackRef = useRef<HTMLOListElement>(null);
+  const triggerRef = useRef<ScrollTrigger | null>(null);
+  const [active, setActive] = useState(0);
+  const [pinned, setPinned] = useState(false);
+
+  useEffect(() => {
+    gsap.registerPlugin(ScrollTrigger);
+    const mm = gsap.matchMedia();
+    mm.add("(min-width: 1024px) and (prefers-reduced-motion: no-preference)", () => {
+      const track = trackRef.current!;
+      const section = sectionRef.current!;
+      setPinned(true);
+      const travel = () => Math.max(0, track.scrollWidth - track.clientWidth);
+      const headerOffset = () => document.querySelector("header")?.getBoundingClientRect().height ?? 0;
+      const tween = gsap.to(track, {
+        x: () => -travel(),
+        ease: "none",
+        scrollTrigger: {
+          trigger: section,
+          start: () => `top ${headerOffset()}`,
+          end: () => `+=${travel()}`,
+          pin: true,
+          scrub: 0.5,
+          invalidateOnRefresh: true,
+          onUpdate: (self) => setActive(Math.round(self.progress * (PANELS.length - 1))),
+        },
+      });
+      triggerRef.current = tween.scrollTrigger ?? null;
+      const ro = new ResizeObserver(() => ScrollTrigger.refresh());
+      ro.observe(track);
+      // Layout settles after the switch to pinned mode and font loading.
+      requestAnimationFrame(() => ScrollTrigger.refresh());
+      document.fonts?.ready.then(() => ScrollTrigger.refresh());
+      return () => {
+        ro.disconnect();
+        triggerRef.current = null;
+        tween.scrollTrigger?.kill();
+        tween.kill();
+        gsap.set(track, { clearProps: "transform" });
+        setPinned(false);
+      };
+    });
+    return () => mm.revert();
+  }, []);
+
+  function onTrackScroll() {
+    if (pinned) return;
+    const t = trackRef.current!;
+    const items = Array.from(t.children) as HTMLElement[];
+    const left = t.scrollLeft;
+    let best = 0;
+    items.forEach((el, i) => {
+      if (Math.abs(el.offsetLeft - t.offsetLeft - left) < Math.abs(items[best].offsetLeft - t.offsetLeft - left)) best = i;
+    });
+    setActive(best);
+  }
+
+  function go(i: number) {
+    const idx = Math.max(0, Math.min(PANELS.length - 1, i));
+    const st = triggerRef.current;
+    if (pinned && st) {
+      window.scrollTo({ top: st.start + ((st.end - st.start) * idx) / (PANELS.length - 1), behavior: "smooth" });
+      return;
+    }
+    const t = trackRef.current!;
+    const el = t.children[idx] as HTMLElement;
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    t.scrollTo({ left: el.offsetLeft - t.offsetLeft - parseFloat(getComputedStyle(t).paddingLeft), behavior: reduce ? "auto" : "smooth" });
+  }
+
+  return (
+    <section
+      id="how-it-works"
+      ref={sectionRef}
+      aria-labelledby="story-title"
+      className={`relative overflow-hidden border-y border-line bg-raised ${pinned ? "flex h-[calc(100svh-4.5rem)] flex-col" : ""}`}
+    >
+      <div className={`wrap flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between ${pinned ? "pt-8 pb-6" : "pt-16 pb-8 lg:pt-24"}`}>
+        <div>
+          <p className="eyebrow">How it works</p>
+          <h2 id="story-title" className="t-1 mt-4 max-w-[16ch]">From invitation to decision.</h2>
+        </div>
+        <div className="flex items-center gap-4">
+          <p className="font-display text-lg tabular-nums" aria-live="polite">
+            <span className="font-semibold">{String(active + 1).padStart(2, "0")}</span>
+            <span className="text-muted"> / {String(PANELS.length).padStart(2, "0")}</span>
+            <span className="sr-only">: {PANELS[active].kicker}</span>
+          </p>
+          <div className="flex">
+            <button type="button" className="inline-flex size-12 items-center justify-center border border-ink hover:bg-ink hover:text-bg disabled:opacity-30" onClick={() => go(active - 1)} disabled={active === 0} aria-label="Previous step">
+              <BackIcon className="size-5" />
+            </button>
+            <button type="button" className="-ml-px inline-flex size-12 items-center justify-center border border-ink hover:bg-ink hover:text-bg disabled:opacity-30" onClick={() => go(active + 1)} disabled={active === PANELS.length - 1} aria-label="Next step">
+              <ArrowIcon className="size-5" />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="wrap" aria-hidden>
+        <div className="h-px bg-line">
+          <div className="h-px origin-left bg-ink transition-transform duration-300" style={{ transform: `scaleX(${(active + 1) / PANELS.length})` }} />
+        </div>
+      </div>
+
+      <ol
+        ref={trackRef}
+        onScroll={onTrackScroll}
+        className={`story-track relative flex gap-5 px-[clamp(1rem,4vw,3.5rem)] lg:gap-8 ${
+          pinned ? "min-h-0 flex-1 py-8" : "items-start snap-x snap-mandatory overflow-x-auto scroll-px-[clamp(1rem,4vw,3.5rem)] py-8 pb-16 lg:pb-24"
+        }`}
+        aria-label="Steps"
+        // Keyboard users can scroll the swipeable row with arrow keys; not needed once scrolling is pinned.
+        tabIndex={pinned ? undefined : 0}
+      >
+        {PANELS.map((p, i) => (
+          <li
+            key={p.kicker}
+            className={`grid flex-none snap-start grid-rows-[auto_1fr] gap-6 bg-bg lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] lg:grid-rows-1 lg:gap-0 ${
+              pinned ? "h-full w-[min(1120px,80vw)]" : "w-[86%] sm:w-[72%] lg:w-[min(1120px,80vw)] lg:h-[min(640px,72svh)]"
+            }`}
+            aria-label={`Step ${i + 1} of ${PANELS.length}: ${p.kicker}`}
+          >
+            <div className="relative aspect-[4/5] min-h-0 sm:aspect-[4/3] lg:aspect-auto">{p.visual}</div>
+            <div className="flex flex-col px-1 pb-2 lg:justify-between lg:p-10 xl:p-12">
+              <p className="font-display text-[3.5rem] font-semibold leading-none tracking-[-0.05em] text-accent lg:text-[5rem]">{String(i + 1).padStart(2, "0")}</p>
+              <div className="mt-4 lg:mt-0">
+                <p className="eyebrow plain">{p.kicker}</p>
+                <h3 className="t-3 mt-3 max-w-[22ch]">{p.title}</h3>
+                <p className="mt-4 max-w-[46ch] leading-relaxed text-ink-2">{p.body}</p>
+              </div>
+            </div>
+          </li>
+        ))}
+      </ol>
+      {!pinned ? null : <p className="sr-only">Scroll down to move through the steps, or use the previous and next buttons.</p>}
+      <p className={`wrap photo-credit ${pinned ? "pb-5" : "-mt-10 pb-12 lg:-mt-16 lg:pb-16"}`}>
+        Illustration of how a check reads, on editorial photos ({EDITORIAL.colonnade.credit.replace("Editorial photo · ", "")}; {EDITORIAL.jumpsuit.credit.replace("Editorial photo · ", "")}). These photos were not assessed and no preview was generated.
+      </p>
+    </section>
+  );
+}
