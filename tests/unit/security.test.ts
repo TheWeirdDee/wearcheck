@@ -46,7 +46,12 @@ describe("catalogue matching", () => {
     const rq = fromManual({ event_name: "", event_type: "wedding", dress_code: "", setting: "indoor", restrictions: "No black or navy", event_date: "" });
     const items = optionsFor(finding("full_body"), rq);
     expect(items.every((i) => !i.colours.some((c) => c === "black" || c === "navy"))).toBe(true);
-    expect(items.length).toBeGreaterThan(0);
+    // The remaining full-body references are black and navy, so nothing may be offered; the UI then offers "try your own item".
+    expect(items).toEqual([]);
+    const pale = fromManual({ event_name: "", event_type: "wedding", dress_code: "", setting: "indoor", restrictions: "Please avoid white or ivory", event_date: "" });
+    const ok = optionsFor(finding("full_body"), pale);
+    expect(ok.length).toBeGreaterThan(0);
+    expect(ok.every((i) => !i.colours.some((c) => c === "white" || c === "ivory_cream"))).toBe(true);
   });
 
   it("only offers footwear that satisfies the footwear rule", () => {
