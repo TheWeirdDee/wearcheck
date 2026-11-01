@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { db } from "./db";
 import { Errors } from "./errors";
 import { type NormalizedImage } from "./images";
-import { putObject } from "./storage";
+import { putObject, removeObjects } from "./storage";
 import { currentGuest, GUEST_RETENTION_HOURS } from "./session";
 import type { AssessmentResult, InvitationExtraction, OutfitObservation, Requirements, UserCorrections } from "./schemas";
 
@@ -65,12 +65,24 @@ export async function saveAsset(
   const id = randomUUID();
   const key = `checks/${checkId}/${kind}/${id}.${img.mime === "image/png" ? "png" : "jpg"}`;
   await putObject(key, img.bytes, img.mime);
-  const [row] = await db()`
-    insert into wearcheck.media_assets (id, check_id, kind, storage_key, mime, width, height, bytes, sha256, origin, consent_record_id, expires_at)
-    select ${id}, ${checkId}, ${kind}, ${key}, ${img.mime}, ${img.width}, ${img.height}, ${img.bytes.length}, ${img.sha256}, ${origin}, ${consentId}, c.expires_at
-    from wearcheck.checks c where c.id = ${checkId}
-    returning *`;
-  return row as unknown as AssetRow;
+  // The row is only written while the check is live. If the insert fails, or the check was deleted
+  // meanwhile, the object is removed again so no unreferenced image is left behind.
+  let row: AssetRow | undefined;
+  try {
+    [row] = (await db()`
+      insert into wearcheck.media_assets (id, check_id, kind, storage_key, mime, width, height, bytes, sha256, origin, consent_record_id, expires_at)
+      select ${id}, ${checkId}, ${kind}, ${key}, ${img.mime}, ${img.width}, ${img.height}, ${img.bytes.length}, ${img.sha256}, ${origin}, ${consentId}, c.expires_at
+      from wearcheck.checks c where c.id = ${checkId} and c.status <> 'deleted'
+      returning *`) as unknown as AssetRow[];
+  } catch (e) {
+    await removeObjects([key]).catch(() => {});
+    throw e;
+  }
+  if (!row) {
+    await removeObjects([key]).catch(() => {});
+    throw Errors.notFound();
+  }
+  return row;
 }
 
 /** Ownership-checked asset lookup for the media route. */
