@@ -132,7 +132,7 @@ export function PreviewRunner({ checkId, initialJob, originalUrl, item, unresolv
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
         >
-          <div ref={result} className="scroll-mt-[4.75rem]"><Compare originalUrl={originalUrl} previewUrl={job.resultUrl!} previewAlt={`AI-generated preview with ${item.title}`} /></div>
+          <div ref={result} className="scroll-mt-[4.75rem] lg:min-h-[calc(100svh-4.75rem)]"><Compare originalUrl={originalUrl} previewUrl={job.resultUrl!} previewAlt={`AI-generated preview with ${item.title}`} /></div>
           <div>
             <h2 className="t-3">{item.title}</h2>
             <p className="mt-2 text-ink-2">{item.reason}</p>
