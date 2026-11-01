@@ -1,68 +1,76 @@
-// Cuts the raw recording from scripts/demo-record.mjs into an exactly 120-second demo with
-// burned-in captions, on-screen disclosures and a synthesised voiceover (Windows SAPI voice).
-// Only the three provider waits (Gemini ×2, YouCam ×1) are sped up, and each speed-up is shown on screen
-// with the real duration. Everything else plays in real time (with cuts between scenes).
-//   node scripts/demo-edit.mjs <raw.webm> <ffmpeg.exe>
+// Cuts the raw footage from scripts/demo-record.mjs into ONE exactly 180-second MP4 (1920×1080) with a
+// synthesised voiceover (Windows SAPI) and burned-in captions. Layout keeps overlays off the app:
+// the app footage fills a 1536×864 area; captions live in the band below it and disclosures/badges in the
+// panel to its right. Only provider waits are sped up, each with its real duration on screen; other edits
+// are cuts between real moments, flagged in the panel. Scene text and cut points come from a scenes file.
+//   node scripts/demo-edit.mjs <raw.json> <ffmpeg.exe> <scenes.json>
 import { execFileSync } from "node:child_process";
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 
-const [raw, ffmpeg] = process.argv.slice(2);
-const { marks } = JSON.parse(readFileSync(raw.replace(/\.webm$/, ".json"), "utf8"));
-const M = Object.fromEntries(marks.map((m) => [m.name, m.t]));
-const work = join(dirname(raw), "edit");
+const [rawJson, ffmpeg, scenesFile] = process.argv.slice(2);
+const rec = JSON.parse(readFileSync(rawJson, "utf8"));
+const { total: TOTAL, scenes } = JSON.parse(readFileSync(scenesFile, "utf8"));
+// Sources: the main desktop take, its mobile take, and optionally segments from another take ("extra").
+const srcs = { desktop: { file: rec.desktop, marks: rec.marks, offset: rec.offset }, mobile: { file: rec.mobile, marks: rec.mobileMarks, offset: rec.mobileOffset }, ...(rec.extra ?? {}) };
+const work = resolve(dirname(rawJson), "edit");
 mkdirSync(work, { recursive: true });
 
-// [scene, raw start, raw end, target seconds, wait interval | null, voiceover, extra on-screen note]
-const scenes = [
-  ["s1", M.s1_landing, M.s2_story, 9, null, "You have the invitation. The outfit is already in your wardrobe. Does it work for this event?", null],
-  ["s2", M.s2_story, M.s3_invitation, 11, null, "WearCheck starts with what the invitation says, then looks at the outfit you already own.", null],
-  ["s3", M.s3_invitation, M.s4_outfit, 21, [M.w_gemini_invitation_start, M.w_gemini_invitation_end, "Gemini reading"], "Upload the invitation. Gemini reads it, and each requirement is quoted word for word, for you to confirm. Nothing is judged until you do.", "Sample invitation created for this demo, not a real event."],
-  ["s4", M.s4_outfit, M.s5_findings, 12, null, "Then add one full-length photo, with consent.", "Photo: Brooke Cagle / Unsplash (CC0). The person shown has not reviewed this AI preview."],
-  ["s5", M.s5_findings, M.s6_options, 18, [M.w_gemini_outfit_start, M.w_gemini_outfit_end, "Gemini reading"], "Each finding names the rule behind it. Here, boots don't match the request for flats or wedges on a lawn.", null],
-  ["s6", M.s6_options, M.s7_render, 10, null, "Choose one alternative. It's a visual reference, not a shopping listing.", null],
-  ["s7", M.s7_render, M.s8_decision, 19, [M.w_render_start, M.w_render_end, "YouCam render"], "YouCam renders it onto the photo, live. It shows the idea of the change, not fit, size or comfort.", "Real YouCam Shoes V3 render on the live site."],
-  ["s8", M.s8_decision, M.s9_end, 12, null, "You decide, and download a decision card. Keeping your outfit is a complete answer too.", null],
-  ["s9", M.s9_end + 1.5, M.end, 8, null, "WearCheck. An outfit you own. An occasion to get right.", null],
-];
-const total = scenes.reduce((s, x) => s + x[3], 0);
-if (total !== 120) throw new Error(`scene targets sum to ${total}, not 120`);
+const at = (src, ref) => {
+  const [name, off] = String(ref).split(/(?=[+-]\d)/);
+  const m = srcs[src].marks.find((x) => x.name === name);
+  if (!m) throw new Error(`unknown mark ${src}:${name}`);
+  // offset: video time minus script time for this source, measured from scene changes (recording can start early).
+  return m.t + (srcs[src].offset ?? 0) + (off ? Number(off) : 0);
+};
 
-// Build the cut list: pieces of [rawStart, rawEnd, speed].
-const pieces = [];
-const timeline = []; // final-time info per scene
-const notes = [];
-let tFinal = 0;
-for (const [id, s, e, target, wait, , note] of scenes) {
-  const start = tFinal;
-  if (!wait) {
-    if (e - s < target) throw new Error(`${id}: raw ${(e - s).toFixed(1)}s shorter than ${target}s`);
-    pieces.push([s, s + target, 1]);
-  } else {
-    const [w0, w1, what] = wait;
-    const before = w0 - s;
-    let after = e - w1;
-    const waitAlloc = Math.max(3, target - before - after);
-    after = Math.max(0, target - before - waitAlloc);
-    if (before > 0.05) pieces.push([s, w0, 1]);
-    const speed = (w1 - w0) / waitAlloc;
-    pieces.push([w0, w1, speed]);
-    if (after > 0.05) pieces.push([w1, w1 + after, 1]);
-    notes.push([start + before, start + before + waitAlloc, `${what} sped up ×${speed.toFixed(1)} (actual ${(w1 - w0).toFixed(1)} s)`]);
+if (scenes.reduce((s, x) => s + x.target, 0) !== TOTAL) throw new Error(`scene targets don't sum to ${TOTAL}`);
+
+// ---------- cut list ----------
+const pieces = []; // { src, a, b, speed, pad }
+const timeline = [];
+const panel = []; // [start, end, slot, text]
+let t = 0;
+for (const sc of scenes) {
+  const ps = sc.pieces.map((p) => {
+    const a = at(p.src ?? "desktop", p.from);
+    let b = at(p.src ?? "desktop", p.to);
+    if (p.max && b - a > p.max) b = a + p.max;
+    if (b <= a) throw new Error(`${sc.id}: empty piece ${p.from}→${p.to}`);
+    return { ...p, src: p.src ?? "desktop", a, b, raw: b - a };
+  });
+  const real = ps.filter((p) => !p.wait).reduce((s, p) => s + p.raw, 0);
+  const waits = ps.filter((p) => p.wait);
+  const waitRaw = waits.reduce((s, p) => s + p.raw, 0);
+  let budget = sc.target - real;
+  if (budget < 2.5 * waits.length - 1e-6) throw new Error(`${sc.id}: real footage ${real.toFixed(1)}s leaves ${budget.toFixed(1)}s for ${waits.length} wait(s); target ${sc.target}`);
+  let used = 0;
+  let cursor = t;
+  for (const p of ps) {
+    let speed = 1;
+    if (p.wait) {
+      const alloc = Math.max(2.5, (budget * p.raw) / waitRaw);
+      speed = Math.max(1, p.raw / alloc);
+      panel.push([cursor, cursor + p.raw / speed, "wait", speed > 1.01 ? `${p.wait}\nshown ×${speed.toFixed(1)} faster — actual wait ${p.raw.toFixed(1)} s` : `${p.wait}\nreal time — ${p.raw.toFixed(1)} s`]);
+    }
+    const len = p.raw / speed;
+    pieces.push({ src: p.src, a: p.a, b: p.b, speed, pad: 0 });
+    used += len;
+    cursor += len;
   }
-  timeline.push({ id, start, end: start + target });
-  if (note) notes.push([start, start + target, note]);
-  tFinal += target;
+  const pad = sc.target - used;
+  if (pad < -0.05) throw new Error(`${sc.id}: footage ${used.toFixed(1)}s exceeds target ${sc.target}s`);
+  pieces.at(-1).pad += Math.max(0, pad); // hold the last real frame
+  const cut = ps.length > 1 && ps.some((p, i) => i > 0 && Math.abs(p.a - ps[i - 1].b) > 0.3);
+  timeline.push({ id: sc.id, start: t, end: t + sc.target });
+  panel.push([t, t + sc.target, "title", sc.title]);
+  if (sc.badge) panel.push([t, t + sc.target, "badge", sc.badge]);
+  if (sc.note) panel.push([t, t + sc.target, "note", sc.note]);
+  if (cut || sc.cutNote) panel.push([t, t + sc.target, "cut", sc.cutNote ?? "Edited for time: jump cuts between real steps"]);
+  t += sc.target;
 }
 
-// Voiceover: one WAV per scene from the Windows speech synthesiser.
-const voice = [];
-for (const [i, sc] of scenes.entries()) {
-  const wav = resolve(work, `vo-${sc[0]}.wav`);
-  const text = sc[5].replace(/'/g, "''");
-  execFileSync("powershell.exe", ["-NoProfile", "-Command", `Add-Type -AssemblyName System.Speech; $s=New-Object System.Speech.Synthesis.SpeechSynthesizer; $s.SelectVoice('Microsoft Zira Desktop'); $s.Rate=1; $s.SetOutputToWaveFile('${wav}'); $s.Speak('${text}'); $s.Dispose()`]);
-  voice.push({ wav, at: timeline[i].start + 0.4 });
-}
+// ---------- voiceover ----------
 const durOf = (file) => {
   try { execFileSync(ffmpeg, ["-hide_banner", "-i", file], { stdio: "pipe" }); } catch (e) {
     const m = String(e.stderr).match(/Duration: (\d+):(\d+):([\d.]+)/);
@@ -70,45 +78,83 @@ const durOf = (file) => {
   }
   return 0;
 };
-for (const [i, v] of voice.entries()) {
-  const d = durOf(v.wav);
-  v.duration = d;
-  const room = scenes[i][3] - 0.6;
-  if (d > room) throw new Error(`voiceover for ${scenes[i][0]} is ${d.toFixed(1)}s, scene allows ${room.toFixed(1)}s`);
-}
+const voice = scenes.map((sc, i) => {
+  const wav = resolve(work, `vo-${sc.id}.wav`);
+  const text = sc.vo.replace(/'/g, "''");
+  execFileSync("powershell.exe", ["-NoProfile", "-Command", `Add-Type -AssemblyName System.Speech; $s=New-Object System.Speech.Synthesis.SpeechSynthesizer; $s.SelectVoice('Microsoft Zira Desktop'); $s.Rate=${sc.rate ?? 1}; $s.SetOutputToWaveFile('${wav}'); $s.Speak('${text}'); $s.Dispose()`]);
+  const duration = durOf(wav);
+  const start = timeline[i].start + (sc.voAt ?? 0.4);
+  if (start + duration > timeline[i].end - 0.2) throw new Error(`voiceover ${sc.id} is ${duration.toFixed(1)}s; scene has ${(timeline[i].end - start - 0.2).toFixed(1)}s`);
+  return { wav, at: start, duration, text: sc.vo, captions: sc.captions };
+});
 
-// Captions (voiceover text) and notes as ASS subtitles.
-const ts = (t) => { const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = (t % 60).toFixed(2).padStart(5, "0"); return `${h}:${String(m).padStart(2, "0")}:${s}`; };
-const esc = (t) => t.replace(/\n/g, "\\N");
+// ---------- captions + panel (ASS, 1920×1080) ----------
+const ts = (x) => { const h = Math.floor(x / 3600), m = Math.floor((x % 3600) / 60), s = (x % 60).toFixed(2).padStart(5, "0"); return `${h}:${String(m).padStart(2, "0")}:${s}`; };
+const esc = (s) => s.replace(/\n/g, "\\N");
 let ass = `[Script Info]
 ScriptType: v4.00+
-PlayResX: 1280
-PlayResY: 720
+PlayResX: 1920
+PlayResY: 1080
 WrapStyle: 0
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Caption,Segoe UI,30,&H00F3EEE5,&H00F3EEE5,&H00171819,&HB4171819,1,0,0,0,100,100,0,0,3,12,0,2,120,120,34,1
-Style: Note,Segoe UI,21,&H00171819,&H00171819,&H00E5EEF3,&H18E5EEF3,1,0,0,0,100,100,0,0,3,8,0,9,40,40,86,1
-Style: Stamp,Segoe UI,17,&H00F3EEE5,&H00F3EEE5,&H00171819,&H64171819,0,0,0,0,100,100,0,0,3,6,0,7,24,24,86,1
+Style: Caption,Segoe UI,40,&H00E5EEF3,&H00E5EEF3,&H00171819,&H00171819,0,0,0,0,100,100,0,0,1,0,0,8,70,70,892,1
+Style: title,Segoe UI Semibold,30,&H00E5EEF3,&H00E5EEF3,&H00171819,&H00171819,1,0,0,0,100,100,0,0,1,0,0,7,1566,30,40,1
+Style: badge,Segoe UI Semibold,26,&H00171819,&H00171819,&H0067B3D9,&H0067B3D9,1,0,0,0,100,100,0,0,3,10,0,7,1566,40,150,1
+Style: wait,Segoe UI,24,&H00171819,&H00171819,&H00E5EEF3,&H00E5EEF3,0,0,0,0,100,100,0,0,3,10,0,7,1566,40,330,1
+Style: note,Segoe UI,23,&H00C8D3D8,&H00C8D3D8,&H00171819,&H00171819,0,0,0,0,100,100,0,0,1,0,0,7,1566,36,520,1
+Style: cut,Segoe UI,21,&H00A9B4B9,&H00A9B4B9,&H00171819,&H00171819,0,1,0,0,100,100,0,0,1,0,0,7,1566,36,650,1
+Style: stamp,Segoe UI,21,&H00A9B4B9,&H00A9B4B9,&H00171819,&H00171819,0,0,0,0,100,100,0,0,1,0,0,1,1566,36,236,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 `;
-for (const [i, v] of voice.entries()) ass += `Dialogue: 0,${ts(v.at)},${ts(Math.min(timeline[i].end - 0.1, v.at + v.duration + 0.6))},Caption,,0,0,0,,${esc(scenes[i][5])}\n`;
-for (const [a, b, text] of notes) ass += `Dialogue: 1,${ts(a)},${ts(b)},Note,,0,0,0,,${esc(text)}\n`;
-ass += `Dialogue: 2,${ts(0)},${ts(120)},Stamp,,0,0,0,,Recorded on wearcheck.vercel.app · 1 Nov 2026\n`;
-const assPath = join(work, "captions.ass");
+// Captions follow the voiceover sentence by sentence, timed by word count.
+for (const v of voice) {
+  const parts = v.captions ?? v.text.match(/[^.!?]+[.!?]+(\s|$)/g).map((s) => s.trim());
+  const words = parts.map((p) => p.split(/\s+/).length);
+  const sum = words.reduce((a, b) => a + b, 0);
+  let c = v.at;
+  parts.forEach((p, i) => {
+    const d = (v.duration * words[i]) / sum;
+    ass += `Dialogue: 0,${ts(c)},${ts(c + d + (i === parts.length - 1 ? 0.5 : 0.05))},Caption,,0,0,0,,${esc(p)}\n`;
+    c += d;
+  });
+}
+for (const [a, b, slot, text] of panel) ass += `Dialogue: 1,${ts(a)},${ts(b)},${slot},,0,0,0,,${esc(text)}\n`;
+ass += `Dialogue: 2,${ts(0)},${ts(TOTAL)},stamp,,0,0,0,,Real footage of the deployed app\\Nwearcheck.vercel.app · recorded 1 Nov 2026\\NVoice: synthesised (Windows SAPI)\n`;
+const assPath = join(work, "captions-180.ass");
 writeFileSync(assPath, ass);
 
-// Video: trim + retime each piece, concatenate, burn subtitles. Audio: voice clips at their offsets.
-const vf = pieces.map(([a, b, sp], i) => `[0:v]trim=start=${a.toFixed(3)}:end=${b.toFixed(3)},setpts=(PTS-STARTPTS)/${sp.toFixed(4)},fps=30[v${i}]`);
-const concat = `${pieces.map((_, i) => `[v${i}]`).join("")}concat=n=${pieces.length}:v=1:a=0[vc]`;
-const subs = `[vc]subtitles='${assPath.replace(/\\/g, "/").replace(/:/g, "\\:")}',trim=duration=120,setpts=PTS-STARTPTS[vout]`;
+// ---------- render ----------
+// Each piece is rendered to its own clip first (seeking per piece keeps memory flat), then concatenated.
+const fitFor = (src) => (srcs[src].mobile || src === "mobile" ? "scale=-2:864:flags=lanczos,pad=1536:864:(ow-iw)/2:0:color=0x2A2825" : "scale=1536:864:flags=lanczos");
+// Playwright's WebM is variable-frame-rate without seek cues, so seeking in it is inaccurate. Convert each
+// source once to constant 30 fps with a keyframe every second; cut points then land on the marked moments.
+for (const [name, s] of Object.entries(srcs)) {
+  if (!s?.file) continue;
+  const cfr = join(work, `src-${name}.mp4`);
+  execFileSync(ffmpeg, ["-y", "-hide_banner", "-loglevel", "error", "-i", s.file, "-vf", "fps=30", "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "12", "-g", "30", "-pix_fmt", "yuv420p", cfr]);
+  s.file = cfr;
+}
+const list = [];
+pieces.forEach((p, i) => {
+  const clip = join(work, `piece-${String(i).padStart(2, "0")}.mp4`);
+  const vf = `setpts=(PTS-STARTPTS)/${p.speed.toFixed(4)},fps=30,${fitFor(p.src)},setsar=1${p.pad > 0.01 ? `,tpad=stop_mode=clone:stop_duration=${p.pad.toFixed(3)}` : ""}`;
+  execFileSync(ffmpeg, ["-y", "-hide_banner", "-loglevel", "error", "-ss", p.a.toFixed(3), "-t", (p.b - p.a).toFixed(3), "-i", srcs[p.src].file, "-vf", vf, "-an", "-c:v", "libx264", "-preset", "fast", "-crf", "14", "-pix_fmt", "yuv420p", clip]);
+  list.push(`file '${clip.replace(/\\/g, "/")}'`);
+});
+const listFile = join(work, "pieces.txt");
+writeFileSync(listFile, list.join("\n"));
+const joined = join(work, "joined.mp4");
+execFileSync(ffmpeg, ["-y", "-hide_banner", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", listFile, "-c", "copy", joined]);
+
+const comp = `[0:v]pad=1920:1080:0:0:color=0x171819,subtitles='${assPath.replace(/\\/g, "/").replace(/:/g, "\\:")}',trim=duration=${TOTAL},setpts=PTS-STARTPTS[vout]`;
 const af = voice.map((v, i) => `[${i + 1}:a]adelay=${Math.round(v.at * 1000)}|${Math.round(v.at * 1000)},aformat=sample_rates=48000:channel_layouts=stereo[a${i}]`);
-const mix = `${voice.map((_, i) => `[a${i}]`).join("")}amix=inputs=${voice.length}:normalize=0,apad,atrim=duration=120[aout]`;
-const outFile = join(dirname(raw), "wearcheck-demo-120s.mp4");
-const args = ["-y", "-hide_banner", "-loglevel", "error", "-i", raw, ...voice.flatMap((v) => ["-i", v.wav]), "-filter_complex", [...vf, concat, subs, ...af, mix].join(";"), "-map", "[vout]", "-map", "[aout]", "-c:v", "libx264", "-preset", "medium", "-crf", "20", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "160k", "-t", "120", "-movflags", "+faststart", outFile];
+const mix = `${voice.map((_, i) => `[a${i}]`).join("")}amix=inputs=${voice.length}:normalize=0,apad,atrim=duration=${TOTAL}[aout]`;
+const outFile = join(dirname(rawJson), `wearcheck-demo-${TOTAL}s.mp4`);
+const args = ["-y", "-hide_banner", "-loglevel", "error", "-i", joined, ...voice.flatMap((v) => ["-i", v.wav]), "-filter_complex", [comp, ...af, mix].join(";"), "-map", "[vout]", "-map", "[aout]", "-c:v", "libx264", "-preset", "medium", "-crf", "18", "-pix_fmt", "yuv420p", "-r", "30", "-c:a", "aac", "-b:a", "160k", "-t", String(TOTAL), "-movflags", "+faststart", outFile];
 execFileSync(ffmpeg, args, { stdio: "inherit" });
-writeFileSync(join(dirname(raw), "wearcheck-demo-120s.json"), JSON.stringify({ raw, pieces, timeline, notes, voice: voice.map((v) => ({ at: v.at, duration: v.duration })) }, null, 2));
+writeFileSync(join(dirname(rawJson), `wearcheck-demo-${TOTAL}s.json`), JSON.stringify({ rawJson, pieces, timeline, panel, voice: voice.map((v) => ({ at: v.at, duration: v.duration, text: v.text })) }, null, 2));
 console.log("wrote", outFile);
