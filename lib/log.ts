@@ -24,6 +24,6 @@ function fmt(event: string, meta?: Record<string, unknown>) {
 export const log = {
   info: (event: string, meta?: Record<string, unknown>) => console.log(fmt(event, meta)),
   warn: (event: string, meta?: Record<string, unknown>) => console.warn(fmt(event, meta)),
-  error: (event: string, err: unknown) =>
-    console.error(fmt(event, { error: err instanceof Error ? `${err.name}: ${err.message}` : String(err) })),
+  error: (event: string, err: unknown, meta?: Record<string, unknown>) =>
+    console.error(fmt(event, { ...meta, error: err instanceof Error ? `${err.name}: ${err.message}` : String(err) })),
 };
