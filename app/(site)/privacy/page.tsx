@@ -54,7 +54,7 @@ export default function PrivacyPage() {
               {[
                 ["No account", "A private browser session holds your check. We don't ask for your name or email."],
                 ["Private by default", "Photos are served only to the browser that uploaded them. There are no public image links."],
-                ["24-hour checks", "Each check expires 24 hours after it starts and is then removed by a scheduled cleanup."],
+                ["24-hour checks", "Each check locks 24 hours after it starts. A cleanup that runs daily then deletes it, normally within the next 24 hours."],
                 ["Delete any time", "Delete a check from inside it, or everything in this browser from the data controls below."],
               ].map(([t, d]) => (
                 <li key={t} className="bg-bg p-5 sm:p-6">
@@ -81,7 +81,7 @@ export default function PrivacyPage() {
           </Section>
 
           <Section id="retention" title="Retention">
-            <p>A check expires <strong>24 hours</strong> after it starts. From then it can&rsquo;t be opened, and a cleanup job that runs daily (and opportunistically as people use the app) permanently deletes its files and records — normally within a day of expiry.</p>
+            <p>A check expires <strong>24 hours</strong> after it starts. From then it can&rsquo;t be opened, and a cleanup job that runs daily (and opportunistically as people use the app) permanently deletes its files and records — normally within 24 hours of expiry, so at most about 48 hours after you start. The scheduled run is daily at 04:17 UTC; deleting a check yourself removes it immediately. Copies held by Google or YouCam follow their own retention policies.</p>
             <p>We keep a small usage ledger without images or text — the provider, feature, task reference, status and timing of each preview — to manage the free-tier budget and investigate failures. Short-lived, hashed rate-limit entries are removed after two days.</p>
           </Section>
 
