@@ -21,7 +21,7 @@ const usable = (lj.models ?? []).filter((m) => m.supportedGenerationMethods?.inc
 console.log("generateContent-capable Gemini models visible to this key:");
 for (const m of usable) console.log(" ", m.name.replace("models/", ""), "|", m.inputTokenLimit, "in");
 
-const model = process.env.GEMINI_MODEL ?? "gemini-2.5-flash";
+const model = process.env.GEMINI_MODEL ?? "gemini-3.5-flash";
 const png = await sharp({ create: { width: 64, height: 64, channels: 3, background: "#1e3a8a" } }).png().toBuffer();
 const t0 = Date.now();
 const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
