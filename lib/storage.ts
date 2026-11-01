@@ -56,9 +56,18 @@ export async function removeObjects(keys: string[]) {
   }
 }
 
-/** Lists object keys under a prefix (used by retention cleanup to catch orphans). */
+/** Lists object keys directly under a prefix (Storage listing is one level deep; folders have no id). */
 export async function listPrefix(prefix: string): Promise<string[]> {
   const { data, error } = await sb().storage.from(bucket()).list(prefix, { limit: 1000 });
   if (error) throw new Error(`storage list failed: ${error.message}`);
   return (data ?? []).filter((o) => o.id).map((o) => `${prefix}/${o.name}`);
+}
+
+const ASSET_KINDS = ["invitation", "outfit", "reference_upload", "render_result", "decision_card"] as const;
+
+/** Every object stored for one check (checks/<id>/<kind>/<file>), including any without a database row. */
+export async function listCheckObjects(checkId: string): Promise<string[]> {
+  if (!/^[0-9a-f-]{36}$/i.test(checkId)) throw new Error("bad check id");
+  const lists = await Promise.all(ASSET_KINDS.map((k) => listPrefix(`checks/${checkId}/${k}`)));
+  return lists.flat();
 }
