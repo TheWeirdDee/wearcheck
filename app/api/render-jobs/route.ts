@@ -1,23 +1,15 @@
 import { after } from "next/server";
-import { z } from "zod";
 import { assertSameOrigin, handler, json, readJson } from "@/lib/api";
 import { currentAssessment, requireOwnedCheck } from "@/lib/checks";
 import { AppError } from "@/lib/errors";
 import { advanceJob, publicJob, requestRender } from "@/lib/jobs";
 import { clientIp, limit } from "@/lib/rate-limit";
-import { RenderCategory } from "@/lib/schemas";
+import { RenderJobRequest } from "@/lib/schemas";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
-const Body = z.object({
-  checkId: z.uuid(),
-  findingId: z.string().max(16),
-  itemId: z.string().max(64).optional(),
-  userAssetId: z.uuid().optional(),
-  userCategory: RenderCategory.optional(),
-  retry: z.boolean().optional(),
-});
+const Body = RenderJobRequest;
 
 /** Creates (or returns the existing) server-owned render job. Duplicate clicks map to the same job. */
 export const POST = handler("render_create", async (req: Request) => {
