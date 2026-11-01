@@ -27,7 +27,7 @@ export const DEMO_CASES: DemoCase[] = [
     slug: "garden-wedding-shoes",
     title: "Outdoor garden wedding",
     challenge: "Formal ceremony on the lawn — the host recommends flats or wedges.",
-    expected: "If narrow heels are visible, WearCheck suggests a shoe change and offers a live Shoes V3 preview.",
+    expected: "If narrow heels are visible, WearCheck explains why they may struggle on grass and offers to preview one alternative pair on your photo.",
     details: {
       event_name: "Garden wedding (example)",
       event_type: "wedding",
@@ -41,7 +41,7 @@ export const DEMO_CASES: DemoCase[] = [
     slug: "no-white-ivory",
     title: "Wedding with a colour rule",
     challenge: "The couple asks guests to avoid white or ivory.",
-    expected: "If the outfit looks pale, WearCheck asks you to confirm the shade before calling a conflict, then offers a live Clothes V4 preview.",
+    expected: "If the outfit looks pale, WearCheck asks you to confirm the shade before calling a conflict, then offers to preview one alternative garment on your photo.",
     details: {
       event_name: "Evening wedding (example)",
       event_type: "wedding",
@@ -55,7 +55,7 @@ export const DEMO_CASES: DemoCase[] = [
     slug: "compatible-keep",
     title: "Work dinner, nothing to fix",
     challenge: "Smart-casual dinner with no stated restrictions.",
-    expected: "If nothing conflicts, WearCheck says so and finishes without any AI render.",
+    expected: "If nothing conflicts, WearCheck says so and finishes without any AI preview.",
     details: {
       event_name: "Team dinner (example)",
       event_type: "work",
