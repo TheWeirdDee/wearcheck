@@ -2,8 +2,9 @@
 
 What may appear publicly (site, README, screenshots, demo video), and on what basis.
 
-## Never public
-- **The project owner's own photos and every render made from them.** Permission covers private testing only. They are stored in git-ignored `private-assets/` and `private-ops/`, or in WearCheck's private bucket until retention cleanup removes them.
+## The project owner's photos
+- **Demo video only.** On 2026-11-01 the project owner authorised public use of their previously supplied photographs and the AI previews made from them "in this WearCheck demo". The 180-second demo video uses the pinstripe photo and its renders on that basis.
+- **Not in the repository or on the site.** That permission is read narrowly: the photos and renders stay in git-ignored `private-assets/` and `private-ops/` (or the private bucket until cleanup), and the site showcase keeps using the CC0 photo below.
 
 ## Public, with the basis for each
 
