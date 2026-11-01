@@ -104,8 +104,8 @@ export const GET = handler("decision_card", async (req: Request, ctx: { params: 
           {itemLine ? <div style={{ fontSize: 19, color: C.muted, lineHeight: 1.35 }}>{itemLine.slice(0, 220)}</div> : null}
         </div>
         <div style={{ display: "flex", justifyContent: "space-between", borderTop: `1px solid ${C.line}`, paddingTop: 16, fontSize: 18, color: C.muted }}>
-          <div style={{ display: "flex" }}>{`${CARD_DISCLAIMER}${twoUp ? " AI previews aren't proof of fit." : ""}`}</div>
-          <div style={{ display: "flex" }}>{stamp}</div>
+          <div style={{ display: "flex", flex: 1, minWidth: 0, paddingRight: 24 }}>{`${CARD_DISCLAIMER}${twoUp ? " AI previews aren't proof of fit." : ""}`}</div>
+          <div style={{ display: "flex", flexShrink: 0 }}>{stamp}</div>
         </div>
       </div>
     ),
