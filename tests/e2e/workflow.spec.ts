@@ -85,25 +85,39 @@ test.describe("guest workflow (no provider calls)", () => {
 test.describe("live pipeline @live", () => {
   test.skip(!LIVE || !existsSync(PHOTO), "Set E2E_LIVE=1 and E2E_PHOTO to a permissioned full-body photo");
 
-  test("photo → real assessment → keep → readable decision card (no render)", async ({ page }) => {
-    await startCheck(page);
-    await enterManual(page, { dress: "Smart casual", setting: "indoor", restrictions: "" });
+  test("no-change outcome: compatible example → keep → decision page → readable card, no render", async ({ page }) => {
+    // The "team dinner" example (smart casual, no restrictions) with a full-length photo must complete as a keep.
+    await page.goto("/demo");
+    await page.getByRole("button", { name: "Start this example" }).nth(2).click();
+    await page.waitForURL(/\/requirements$/);
+    const checkId = page.url().match(/check\/([0-9a-f-]{36})/)![1];
     await page.getByRole("button", { name: "These details are correct" }).click();
     await page.waitForURL(/\/outfit$/);
     await page.locator('input[aria-label="Choose outfit photo"]').setInputFiles(PHOTO);
     await page.getByRole("checkbox").check();
     await page.getByRole("button", { name: "Continue" }).click();
     await page.waitForURL(/\/assessment$/);
-    await expect(page.getByText(/Looks compatible|One change worth considering|Potential dress-code conflict|Not enough information/)).toBeVisible({ timeout: 90_000 });
-    const keep = page.getByRole("button", { name: /Save my outfit check|Keep this outfit/ });
-    if (await keep.isEnabled()) {
-      await keep.click();
-      await page.waitForURL(/\/decision$/);
-      const card = await page.request.get(page.url().replace(/\/check\/(.+)\/decision$/, "/api/checks/$1/decision-card"));
-      expect(card.status()).toBe(200);
-      expect(card.headers()["content-type"]).toContain("image/png");
-      expect((await card.body()).length).toBeGreaterThan(50_000);
-    }
+    // Precondition, not a branch: this journey only counts if the outfit is judged compatible.
+    await expect(page.getByText("Looks compatible with the stated requirements").first()).toBeVisible({ timeout: 120_000 });
+    const keep = page.getByRole("button", { name: "Save my outfit check" });
+    await expect(keep).toBeEnabled();
+    await keep.click();
+    await page.waitForURL(/\/decision$/);
+    await expect(page.getByRole("heading", { name: "Keep your outfit." })).toBeVisible();
+    await expect(page.getByText("No change needed.")).toBeVisible();
+    await expect(page.locator('img[alt^="AI-generated preview"]')).toHaveCount(0);
+    const card = await page.request.get(`/api/checks/${checkId}/decision-card?download=1`);
+    expect(card.status()).toBe(200);
+    expect(card.headers()["content-type"]).toContain("image/png");
+    expect(card.headers()["content-disposition"]).toContain("attachment");
+    const png = await card.body();
+    expect(png.readUInt32BE(16)).toBe(1080); // PNG IHDR width
+    expect(png.readUInt32BE(20)).toBe(1350);
+    expect(png.length).toBeGreaterThan(50_000);
+    expect((await (await page.request.get(`/api/checks/${checkId}`)).json()).decision).toBe("keep");
+    // No provider task was created for a keep.
+    await page.goto(`/check/${checkId}/preview`);
+    await expect(page.getByRole("heading", { name: "No preview yet" })).toBeVisible();
   });
 
 });
@@ -148,12 +162,14 @@ async function renderJourney(page: Page, browser: import("@playwright/test").Bro
     await page.getByRole("button", { name: answer, exact: true }).click();
     await expect(page.getByText("One question first")).toHaveCount(0, { timeout: 60_000 });
   }
-  await page.getByRole("link", { name: /Preview the smallest change|Explore alternatives/ }).first().click();
-  await page.waitForURL(/\/options/);
-  let card = page.locator("li", { has: page.getByRole("heading", { name: item }) }).first();
-  if (!(await card.count())) {
-    await page.goto(`/check/${checkId}/options?explore=1`);
-    card = page.locator("li", { has: page.getByRole("heading", { name: item }) }).first();
+  // Precondition: the finding must offer a preview; an "explore" fallback would not test the named journey.
+  await page.getByRole("link", { name: "Preview the smallest change" }).click();
+  await page.waitForURL(/\/options$/);
+  const card = page.locator("li", { has: page.getByRole("heading", { name: item }) }).first();
+  await expect(card).toBeVisible();
+  // Catalogue cards must be readable, not narrow strips.
+  for (const w of await page.getByTestId("catalogue").locator("li").evaluateAll((els) => els.map((e) => e.getBoundingClientRect().width))) {
+    expect(w).toBeGreaterThanOrEqual(200);
   }
   await card.getByRole("button", { name: /Try this|Selected/ }).click();
   await page.getByRole("button", { name: "Generate preview" }).click();
@@ -167,6 +183,19 @@ async function renderJourney(page: Page, browser: import("@playwright/test").Bro
   await expect(page.getByRole("heading", { name: "Your AI preview" })).toBeVisible({ timeout: 6 * 60_000 });
   const img = page.locator('img[alt^="AI-generated preview"]').first();
   await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth), { timeout: 30_000 }).toBeGreaterThan(0);
+  await expect(page.getByRole("heading", { name: item })).toBeVisible(); // the selected item is named
+  await expect(page.getByText(/doesn.t re-check the generated image/)).toBeVisible(); // render ≠ resolved rule
+  // The whole frame (feet included) is on screen, and the two images really differ.
+  await page.waitForTimeout(1200);
+  const frame = await page.getByTestId("compare-frame").boundingBox();
+  const vh = page.viewportSize()!.height;
+  expect(frame!.y).toBeGreaterThanOrEqual(0);
+  expect(frame!.y + frame!.height).toBeLessThanOrEqual(vh + 1);
+  const zoom = page.getByRole("button", { name: "Zoom to the change" });
+  await expect(zoom).toBeEnabled({ timeout: 15_000 });
+  await zoom.click();
+  await expect(page.getByText("Zoomed to the changed area")).toBeVisible();
+  await page.getByRole("button", { name: "Show full photo" }).click();
 
   // Preview download.
   const previewHref = await page.getByRole("link", { name: /Download image/ }).getAttribute("href");
