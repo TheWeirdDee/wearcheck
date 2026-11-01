@@ -17,7 +17,7 @@ export default async function PreviewPage({ params, searchParams }: { params: Pr
   if (!job) {
     return (
       <div className="max-w-2xl">
-        <h1 className="text-3xl font-bold">No preview yet</h1>
+        <h1 className="t-2">No preview yet</h1>
         <p className="mt-3 text-ink-2">Choose an item to preview first.</p>
         <Link href={`/check/${check.id}/options`} className="btn btn-primary mt-6">Choose an item</Link>
       </div>
