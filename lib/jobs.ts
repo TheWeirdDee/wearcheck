@@ -3,8 +3,8 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import sharp, { type Metadata } from "sharp";
-import { catalogueItem } from "./catalogue";
-import { type CheckRow, type AssessmentRow, saveAsset, trackEvent } from "./checks";
+import { catalogueItem, optionsFor } from "./catalogue";
+import { type CheckRow, type AssessmentRow, currentRequirements, saveAsset, trackEvent } from "./checks";
 import { db } from "./db";
 import { env } from "./env";
 import { AppError } from "./errors";
@@ -21,6 +21,9 @@ import { createTask, describeEngineError, downloadResult, getTask, ProviderError
  * Guarantees:
  *  - identical requests (same check, assessment, photo, reference, attempt) map to one row via a unique idempotency key
  *  - at most one active job per check; new paid attempts only on an explicit user retry
+ *  - admission (active-job check, spend caps, insert) runs in one transaction under an advisory lock,
+ *    so two different simultaneous requests can't both pass the checks
+ *  - if YouCam may have accepted a task whose id we never received, the job says so ("outcome unknown")
  *  - provider polling is lease-protected and throttled so concurrent pollers can't double-persist
  */
 
@@ -60,6 +63,7 @@ export async function requestRender(r: RenderRequest): Promise<JobRow> {
     ? { id: null as string | null, render_category: voluntary.data }
     : r.assessment.findings_json.findings.find((f) => f.id === r.findingId);
   if (!finding || !finding.render_category) throw new AppError("NOT_RENDERABLE", "That finding doesn't have a preview option.", 400);
+  const findingRuleId = voluntary?.success ? null : (finding as { rule_id?: string | null }).rule_id ?? null;
   if (r.assessment.superseded_at) throw new AppError("STALE_ASSESSMENT", "Your requirements or photo changed. Please review the updated assessment first.", 409, true, "EDIT_REQUIREMENTS");
 
   let category: RenderCategory;
@@ -69,6 +73,11 @@ export async function requestRender(r: RenderRequest): Promise<JobRow> {
     if (!item) throw new AppError("UNKNOWN_ITEM", "That reference item isn't available.", 400, false, "CHOOSE_ANOTHER_ITEM");
     category = item.category;
     refKey = `cat:${item.id}`;
+    // Re-validate on the server: the item must still be an eligible correction under the confirmed requirements.
+    const reqs = await currentRequirements(r.check);
+    if (!reqs || !optionsFor({ render_category: finding.render_category, rule_id: findingRuleId }, reqs.json).some((c) => c.id === item.id)) {
+      throw new AppError("ITEM_NOT_ELIGIBLE", "That reference doesn't meet your confirmed requirements. Please choose another item or upload your own.", 400, false, "CHOOSE_ANOTHER_ITEM");
+    }
   } else {
     const rows = await db()`select id from wearcheck.media_assets where id = ${r.reference.assetId} and check_id = ${r.check.id} and kind = 'reference_upload'`;
     if (!rows[0]) throw new AppError("UNKNOWN_ITEM", "We couldn't find your uploaded item.", 400, false, "CHOOSE_ANOTHER_ITEM");
@@ -88,35 +97,39 @@ export async function requestRender(r: RenderRequest): Promise<JobRow> {
   const last = prior[0] as unknown as JobRow | undefined;
   if (last && (last.status !== "failed" || !r.explicitRetry)) return last; // duplicate click / back button / refresh
 
-  const active = await sql`select id from wearcheck.render_jobs where check_id = ${r.check.id} and status = any(${ACTIVE}) limit 1`;
-  if (active[0]) throw new AppError("RENDER_IN_PROGRESS", "A preview for this check is already running.", 409, true, "WAIT");
-
-  // Bounded spend: per guest session and global per-day caps.
-  const [{ session_count }] = await sql`
-    select count(*)::int as session_count from wearcheck.render_jobs j join wearcheck.checks c on c.id = j.check_id
-    where c.guest_session_id = ${r.check.guest_session_id} and j.provider_task_id is not null`;
-  if (session_count >= env().RENDER_LIMIT_PER_SESSION) {
-    throw new AppError("RENDER_LIMIT_SESSION", `This session has used its ${env().RENDER_LIMIT_PER_SESSION} AI previews. Your assessment and decision card still work.`, 429, false, "NONE");
-  }
-  const [{ day_count }] = await sql`select count(*)::int as day_count from wearcheck.api_usage_events where provider = 'youcam' and created_at > now() - interval '24 hours' and status <> 'not_submitted'`;
-  if (day_count >= env().RENDER_LIMIT_GLOBAL_PER_DAY) {
-    throw new AppError("RENDER_LIMIT_GLOBAL", "WearCheck has reached today's AI preview limit. Your assessment and decision card still work.", 429, false, "NONE");
-  }
-
   const attempt = (last?.attempt ?? 0) + 1;
   const idem = createHash("sha256").update(`${r.check.id}|${inputRevision}|${attempt}`).digest("hex");
-  const inserted = await sql`
-    insert into wearcheck.render_jobs (check_id, assessment_id, finding_id, feature, garment_category, catalogue_item_id, user_ref_asset_id, source_asset_id, input_revision, idempotency_key, attempt, status, lease_until)
-    values (${r.check.id}, ${r.assessment.id}, ${finding.id}, ${featureFor(category)}, ${category === "shoes" ? null : category},
-            ${r.reference.kind === "catalogue" ? r.reference.itemId : null}, ${r.reference.kind === "user" ? r.reference.assetId : null},
-            ${r.check.photo_asset_id}, ${inputRevision}, ${idem}, ${attempt}, 'validating', now() + interval '90 seconds')
-    on conflict (idempotency_key) do nothing
-    returning *`;
-  if (!inserted[0]) {
-    const [existing] = await sql`select * from wearcheck.render_jobs where idempotency_key = ${idem}`;
-    return existing as unknown as JobRow; // concurrent duplicate submission
-  }
-  const job = inserted[0] as unknown as JobRow;
+  const admitted = await sql.begin(async (tx) => {
+    // One admission at a time: active-job and budget checks and the insert are atomic.
+    await tx`select pg_advisory_xact_lock(hashtext('wearcheck:render-admission'))`;
+    const [dupe] = await tx`select * from wearcheck.render_jobs where idempotency_key = ${idem}`;
+    if (dupe) return dupe as unknown as JobRow; // concurrent duplicate submission
+    const active = await tx`select id from wearcheck.render_jobs where check_id = ${r.check.id} and status = any(${ACTIVE}) limit 1`;
+    if (active[0]) throw new AppError("RENDER_IN_PROGRESS", "A preview for this check is already running.", 409, true, "WAIT");
+
+    // Bounded spend: per guest session and global per-day caps. Jobs still being sent count too.
+    const [{ session_count }] = await tx`
+      select count(*)::int as session_count from wearcheck.render_jobs j join wearcheck.checks c on c.id = j.check_id
+      where c.guest_session_id = ${r.check.guest_session_id} and (j.provider_task_id is not null or j.status = any(${ACTIVE}) or j.error_code = 'SUBMIT_OUTCOME_UNKNOWN')`;
+    if (session_count >= env().RENDER_LIMIT_PER_SESSION) {
+      throw new AppError("RENDER_LIMIT_SESSION", `This session has used its ${env().RENDER_LIMIT_PER_SESSION} AI previews. Your assessment and decision card still work.`, 429, false, "NONE");
+    }
+    const [{ day_count }] = await tx`
+      select (select count(*)::int from wearcheck.api_usage_events where provider = 'youcam' and created_at > now() - interval '24 hours' and status <> 'not_submitted')
+           + (select count(*)::int from wearcheck.render_jobs where status = any(${["draft", "validating", "uploading_source", "uploading_reference"]})) as day_count`;
+    if (day_count >= env().RENDER_LIMIT_GLOBAL_PER_DAY) {
+      throw new AppError("RENDER_LIMIT_GLOBAL", "WearCheck has reached today's AI preview limit. Your assessment and decision card still work.", 429, false, "NONE");
+    }
+    const [row] = await tx`
+      insert into wearcheck.render_jobs (check_id, assessment_id, finding_id, feature, garment_category, catalogue_item_id, user_ref_asset_id, source_asset_id, input_revision, idempotency_key, attempt, status, lease_until)
+      values (${r.check.id}, ${r.assessment.id}, ${finding.id}, ${featureFor(category)}, ${category === "shoes" ? null : category},
+              ${r.reference.kind === "catalogue" ? r.reference.itemId : null}, ${r.reference.kind === "user" ? r.reference.assetId : null},
+              ${r.check.photo_asset_id}, ${inputRevision}, ${idem}, ${attempt}, 'validating', now() + interval '90 seconds')
+      returning *`;
+    return { fresh: row as unknown as JobRow };
+  });
+  if (!("fresh" in admitted)) return admitted;
+  const job = admitted.fresh;
   await trackEvent(r.check.id, "render_submitted", { feature: job.feature, attempt });
   return submit(job, r.check.demo_case);
 }
@@ -137,14 +150,20 @@ async function referenceBytes(job: JobRow): Promise<Buffer> {
   return getObject(a.storage_key as string);
 }
 
+const UNKNOWN_MESSAGE = "We lost contact with YouCam while sending this preview, so we can't tell whether it was generated (and charged). Trying again starts a new paid preview.";
+
 async function submit(job: JobRow, demoCase: string | null): Promise<JobRow> {
   let taskId: string | null = null;
+  let creating = false;
   try {
     job = await setJob(job.id, { status: "uploading_source" });
     const [src] = await db()`select storage_key from wearcheck.media_assets where id = ${job.source_asset_id} and check_id = ${job.check_id}`;
     const srcFileId = await uploadFile(await getObject(src.storage_key as string), `src-${job.id}.jpg`, "image/jpeg");
     job = await setJob(job.id, { status: "uploading_reference" });
     const refFileId = await uploadFile(await referenceBytes(job), `ref-${job.id}.jpg`, "image/jpeg");
+    // Durable marker: from here a crash or lost response means YouCam may have accepted the task.
+    job = await setJob(job.id, { provider_status: "creating_task", lease_until: new Date(Date.now() + 90_000) });
+    creating = true;
     taskId = await createTask(
       job.feature === "shoes-transfer"
         ? { feature: "shoes-transfer", srcFileId, refFileId }
@@ -155,12 +174,17 @@ async function submit(job: JobRow, demoCase: string | null): Promise<JobRow> {
     log.info("render_submitted", { job: job.id, feature: job.feature, attempt: job.attempt });
     return await setJob(job.id, { status: "submitted", provider_task_id: taskId, submitted_at: new Date(), lease_until: null });
   } catch (e) {
+    // A definite HTTP rejection from createTask means no task exists; a timeout, network error or
+    // malformed reply after the request was sent leaves the outcome unknown.
+    const definite = e instanceof ProviderError && e.code !== "PROVIDER_MALFORMED";
+    const unknown = (creating && !taskId && !definite) || Boolean(taskId);
     const pe = e instanceof AppError ? e : new ProviderError("PROVIDER_DOWN", "The preview service couldn't be reached.", 502, true);
+    const code = unknown ? "SUBMIT_OUTCOME_UNKNOWN" : pe.code;
     await db()`insert into wearcheck.api_usage_events (render_job_id, check_id, provider, feature, units_estimated, status, provider_task_id, demo_case)
-               values (${job.id}, ${job.check_id}, 'youcam', ${job.feature}, 0, ${taskId ? "submitted" : "not_submitted"}, ${taskId}, ${demoCase})`;
-    log.warn("render_submit_failed", { job: job.id, code: pe.code });
-    await trackEvent(job.check_id, "render_failed", { code: pe.code });
-    return setJob(job.id, { status: "failed", error_code: pe.code, error_message: pe.message, lease_until: null, provider_task_id: taskId });
+               values (${job.id}, ${job.check_id}, 'youcam', ${job.feature}, ${unknown ? UNITS_PER_TASK[job.feature] : 0}, ${taskId ? "submitted" : unknown ? "unknown" : "not_submitted"}, ${taskId}, ${demoCase})`;
+    log.warn("render_submit_failed", { job: job.id, code });
+    await trackEvent(job.check_id, "render_failed", { code });
+    return setJob(job.id, { status: "failed", error_code: code, error_message: unknown ? UNKNOWN_MESSAGE : pe.message, lease_until: null, provider_task_id: taskId });
   }
 }
 
@@ -227,10 +251,18 @@ export async function advanceJob(jobId: string): Promise<JobRow> {
   }
 }
 
-/** A submission that crashed mid-way (lease expired, no task id) is failed — never silently resubmitted. */
+/**
+ * A submission that crashed mid-way (lease expired, no task id) is failed — never silently resubmitted.
+ * If it crashed while creating the task, YouCam may have accepted it, so the outcome is reported as unknown.
+ */
 async function reconcileStuckSubmission(job: JobRow): Promise<JobRow> {
   if (["validating", "uploading_source", "uploading_reference", "draft"].includes(job.status) && job.lease_until && new Date(job.lease_until).getTime() < Date.now()) {
-    return setJob(job.id, { status: "failed", error_code: "SUBMIT_INTERRUPTED", error_message: "Sending the preview was interrupted. Nothing was generated; you can try again.", lease_until: null });
+    if (job.provider_status === "creating_task") {
+      await db()`insert into wearcheck.api_usage_events (render_job_id, check_id, provider, feature, units_estimated, status)
+                 values (${job.id}, ${job.check_id}, 'youcam', ${job.feature}, ${UNITS_PER_TASK[job.feature]}, 'unknown')`;
+      return setJob(job.id, { status: "failed", error_code: "SUBMIT_OUTCOME_UNKNOWN", error_message: UNKNOWN_MESSAGE, lease_until: null });
+    }
+    return setJob(job.id, { status: "failed", error_code: "SUBMIT_INTERRUPTED", error_message: "Sending the preview was interrupted before it reached YouCam. Nothing was generated; you can try again.", lease_until: null });
   }
   return job;
 }
