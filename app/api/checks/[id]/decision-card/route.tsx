@@ -6,7 +6,7 @@ import sharp from "sharp";
 import { handler } from "@/lib/api";
 import { requireOwnedCheck, trackEvent } from "@/lib/checks";
 import { db } from "@/lib/db";
-import { CARD_DISCLAIMER, dressCodeSource, loadDecision, SOURCE_LABEL } from "@/lib/decision";
+import { CARD_DISCLAIMER, dressCodeSource, loadDecision, SOURCE_LABEL, unresolvedNote } from "@/lib/decision";
 import { AppError } from "@/lib/errors";
 import { getObject } from "@/lib/storage";
 
@@ -16,14 +16,14 @@ export const maxDuration = 30;
 const font = (pkg: string, file: string) => readFile(path.join(process.cwd(), "node_modules", "@fontsource", pkg, "files", file));
 
 async function dataUri(bytes: Buffer, w: number, h: number) {
-  const out = await sharp(bytes).resize({ width: w, height: h, fit: "cover", position: "attention" }).jpeg({ quality: 84 }).toBuffer();
+  const out = await sharp(bytes).resize({ width: w, height: h, fit: "contain", background: "#E4DCCD" }).jpeg({ quality: 84 }).toBuffer();
   return `data:image/jpeg;base64,${out.toString("base64")}`;
 }
 
 const C = { ivory: "#F3EEE5", ink: "#1A1917", muted: "#625C53", line: "#D3C9B8", accent: "#8A4A2F", ok: "#35573D" };
 
 /**
- * Outfit Decision Card as a PNG (1080×1350). Images are embedded inline, so the file contains
+ * Outfit Decision Card as a PNG (1080×1350). Photos are fitted whole (never cropped), embedded inline, so the file contains
  * no private URLs. Works for the no-change outcome without any render.
  */
 export const GET = handler("decision_card", async (req: Request, ctx: { params: Promise<{ id: string }> }) => {
@@ -40,7 +40,7 @@ export const GET = handler("decision_card", async (req: Request, ctx: { params: 
   }
   const twoUp = Boolean(preview);
   const imgW = twoUp ? 470 : 640;
-  const imgH = twoUp ? 620 : 700;
+  const imgH = twoUp ? 580 : 700;
   const [origUri, prevUri] = await Promise.all([dataUri(original, imgW, imgH), preview ? dataUri(preview, imgW, imgH) : Promise.resolve(null)]);
   const [t600, t700, i400, i500, i600] = await Promise.all([
     font("inter-tight", "inter-tight-latin-600-normal.woff"), font("inter-tight", "inter-tight-latin-700-normal.woff"),
@@ -58,6 +58,7 @@ export const GET = handler("decision_card", async (req: Request, ctx: { params: 
   const occasion = r.event_name ?? (r.event_type ? r.event_type[0].toUpperCase() + r.event_type.slice(1) : "Your occasion");
   const date = r.event_date ? new Date(`${r.event_date}T12:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }) : null;
   const itemLine = d.item ? `${d.item.title} — ${d.item.creator}, ${d.item.licence}. Visual reference, not a shopping listing.` : d.userRefAssetId ? "Reference item provided by you." : null;
+  const note = !keep && kf ? unresolvedNote(kf, r) : null;
   const stamp = new Date(d.generatedAt).toISOString().replace("T", " ").slice(0, 16) + " UTC";
 
   const label = (text: string, dark = false) => (
@@ -96,7 +97,8 @@ export const GET = handler("decision_card", async (req: Request, ctx: { params: 
           ) : null}
         </div>
         <div style={{ display: "flex", flexDirection: "column", marginTop: 26, gap: 10, flexGrow: 1 }}>
-          <div style={{ fontSize: 27, lineHeight: 1.35, fontWeight: 500 }}>{recommendation.slice(0, 260)}</div>
+          <div style={{ fontSize: 26, lineHeight: 1.35, fontWeight: 500 }}>{recommendation.slice(0, 240)}</div>
+          {note ? <div style={{ fontSize: 19, color: C.accent, lineHeight: 1.35 }}>{note.slice(0, 220)}</div> : null}
           {evidence ? <div style={{ fontSize: 21, color: C.muted, lineHeight: 1.35 }}>{`Evidence: ${evidence.slice(0, 200)}`}</div> : null}
           <div style={{ fontSize: 21, color: C.muted }}>{`Dress code source: ${dressCodeSource(r).slice(0, 120)}`}</div>
           {itemLine ? <div style={{ fontSize: 19, color: C.muted, lineHeight: 1.35 }}>{itemLine.slice(0, 220)}</div> : null}
