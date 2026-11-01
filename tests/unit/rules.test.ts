@@ -66,7 +66,8 @@ describe("decision policy", () => {
     const r = assess(req("Flats or wedges recommended", { setting: "outdoor" }), o, {}, ALL);
     expect(r.shoes_assessable).toBe(false);
     expect(r.primary_action).toBeNull();
-    expect(r.rows.shoes_venue.status).toBe("cant_assess");
+    expect(r.rows.shoes_venue.status).toBe("not_checked"); // never "No clear issue" for unseen shoes
+    expect(r.status).toBe("insufficient");
   });
 
   it("labels venue-only concerns as practical, never as an event rule", () => {
