@@ -98,7 +98,8 @@ test.describe("live pipeline @live", () => {
     await page.getByRole("button", { name: "Continue" }).click();
     await page.waitForURL(/\/assessment$/);
     // Precondition, not a branch: this journey only counts if the outfit is judged compatible.
-    await expect(page.getByText("Looks compatible with the stated requirements").first()).toBeVisible({ timeout: 120_000 });
+    // Either compatible headline: "checked and compatible", or "nothing specific to check" when the dress code can't be judged.
+    await expect(page.getByText(/^(Looks compatible with the stated requirements|No specific requirements to check against)$/).first()).toBeVisible({ timeout: 120_000 });
     const keep = page.getByRole("button", { name: "Save my outfit check" });
     await expect(keep).toBeEnabled();
     await keep.click();
@@ -146,10 +147,15 @@ test.describe("live invitation reading @live", () => {
  */
 const RENDER = LIVE && process.env.E2E_RENDER === "1" && existsSync(PHOTO);
 
-async function renderJourney(page: Page, browser: import("@playwright/test").Browser, exampleIndex: number, item: RegExp, answer?: string) {
-  await page.goto("/demo");
-  await page.getByRole("button", { name: "Start this example" }).nth(exampleIndex).click();
-  await page.waitForURL(/\/requirements$/);
+async function renderJourney(page: Page, browser: import("@playwright/test").Browser, setup: number | { restrictions: string }, item: RegExp, answer?: string) {
+  if (typeof setup === "number") {
+    await page.goto("/demo");
+    await page.getByRole("button", { name: "Start this example" }).nth(setup).click();
+    await page.waitForURL(/\/requirements$/);
+  } else {
+    await startCheck(page);
+    await enterManual(page, { dress: "Formal", setting: "outdoor", restrictions: setup.restrictions });
+  }
   const checkId = page.url().match(/check\/([0-9a-f-]{36})/)![1];
   await page.getByRole("button", { name: "These details are correct" }).click();
   await page.waitForURL(/\/outfit$/);
@@ -228,9 +234,10 @@ test.describe("live YouCam renders @live @render", () => {
   test.skip(!RENDER, "Paid renders: set E2E_LIVE=1 E2E_RENDER=1 and E2E_PHOTO");
   test.setTimeout(10 * 60_000);
 
-  test("shoe render (Shoes V3): garden wedding → loafer → reload → downloads → isolation → delete", async ({ page, browser, isMobile }) => {
+  test("shoe render (Shoes V3): “heels or wedges required” → wedge → reload → downloads → isolation → delete", async ({ page, browser, isMobile }) => {
     test.skip(isMobile, "run once, on desktop, to bound credit use");
-    await renderJourney(page, browser, 0, /tassel loafer/i);
+    // Deterministic for a photo with flat shoes, loafers or boots: none of them is a heel or a wedge.
+    await renderJourney(page, browser, { restrictions: "Heels or wedges required" }, /wedge sandal/i);
   });
 
   test("garment render (Clothes V4): avoid white or ivory → blue shirt → reload → downloads → isolation → delete", async ({ page, browser, isMobile }) => {
