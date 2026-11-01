@@ -33,7 +33,7 @@ describe("decision policy", () => {
     const o = obs({ items: [{ category: "dress", description: "pale dress", colour_family: "ivory_cream", colour_certainty: "uncertain", visibility: "clear", footwear_style: null }] });
     const r = assess(req("Please avoid white or ivory"), o, {}, ALL);
     expect(r.status).toBe("insufficient");
-    expect(r.clarification?.id).toBe("main_garment_colour");
+    expect(r.clarification?.id).toBe("colour:item0");
     expect(r.findings.some((f) => f.status === "conflict")).toBe(false);
     expect(r.primary_action).toBeNull();
   });
