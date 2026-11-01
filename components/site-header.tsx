@@ -116,7 +116,7 @@ export function SiteHeader({ variant = "site" }: { variant?: "site" | "workflow"
                 Check my outfit <ArrowIcon className="nudge size-4" />
               </StartCheckButton>
             </div>
-            <p className="mt-5 text-sm text-muted">No account needed. Your check is kept privately for 24 hours.</p>
+            <p className="mt-5 text-sm text-muted">No account needed. Your check stays private, locks after 24 hours and is then deleted.</p>
           </nav>
         </div>
       ) : null}
