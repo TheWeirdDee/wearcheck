@@ -219,7 +219,10 @@ export function assess(
     } else {
       findings.push({
         id: id(), rule_id: r.id, area: "shoes_venue", kind: "explicit_preference", status: "ok",
-        observation: `Your shoes appear to be ${FOOTWEAR_LABEL[style]}.`, reason: `That fits “${r.evidence_text ?? r.summary}”.`,
+        observation: style === "other"
+          ? (r.footwear_avoid.length ? `Your shoes don't appear to be ${r.footwear_avoid.map((x) => FOOTWEAR_LABEL[x]).join(" or ")}.` : "Your shoes don't match a style we can name.")
+          : `Your shoes appear to be ${FOOTWEAR_LABEL[style]}.`,
+        reason: `That fits “${r.evidence_text ?? r.summary}”.`,
         evidence_text: r.evidence_text, evidence_source: "photo_model", uncertainty: null, user_action: "none", render_category: null, rank: 90,
       });
     }
@@ -283,11 +286,16 @@ export function assess(
 
   // ---------- subjective formality: "may not match", never a violation ----------
   let dressCodeChecked = false;
+  let formalityNote = "";
   if (req.dress_code && !req.dress_code.ambiguous && obs.formality_impression !== "unclear") {
     const code = req.dress_code.value.toLowerCase();
     const wanted = /black tie|white tie/.test(code) ? 3 : /formal|cocktail|evening/.test(code) ? 2 : /smart|business|semi/.test(code) ? 1 : /casual/.test(code) ? 0 : null;
     const seen = { casual: 0, smart_casual: 1, formal: 2, black_tie: 3 }[obs.formality_impression];
     dressCodeChecked = wanted !== null;
+    const reads = obs.formality_impression.replace("_", " ");
+    formalityNote = wanted !== null && seen !== undefined && wanted - seen === 1
+      ? `Reads as ${reads} in the photo — one step less formal than “${req.dress_code.value}”. Formality is subjective, so WearCheck only flags a gap of two steps or more.`
+      : `Reads as ${reads} in the photo (subjective).`;
     if (wanted !== null && seen !== undefined && wanted - seen >= 2) {
       findings.push({
         id: id(), rule_id: null, area: "clothing", kind: "style_suggestion", status: "consider_change",
@@ -332,7 +340,7 @@ export function assess(
       d.ambiguous ? { label: `Dress code: ${d.value}`, source: src, result: "not_checked", note: "Open to interpretation, so there's nothing specific to check." }
         : !dressCodeChecked ? { label: `Dress code: ${d.value}`, source: src, result: "not_checked", note: obs.formality_impression === "unclear" ? "We couldn't judge formality from this photo." : "WearCheck can't compare this dress code to a photo." }
           : issue ? { label: `Dress code: ${d.value}`, source: src, result: "issue", note: issue.observation }
-            : { label: `Dress code: ${d.value}`, source: src, result: "ok", note: `Reads as ${obs.formality_impression.replace("_", " ")} in the photo (subjective).` },
+            : { label: `Dress code: ${d.value}`, source: src, result: "ok", note: formalityNote },
     );
   }
   if (outdoorsSoft && footRules.length === 0) {
