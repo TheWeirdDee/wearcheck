@@ -78,8 +78,8 @@ export function OptionsView(p: Props) {
   }
 
   return (
-    <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_20rem] lg:gap-12">
-      <div>
+    <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_18rem] lg:gap-10">
+      <div className="min-w-0">
         <div className="flex items-start gap-4">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={`${p.photoUrl}?size=thumb`} alt="Your original outfit" className="hidden w-24 bg-photo object-cover sm:block" />
@@ -91,13 +91,13 @@ export function OptionsView(p: Props) {
         </div>
 
         {p.items.length ? (
-          <ul className="mt-10 grid gap-x-6 gap-y-10 sm:grid-cols-2 xl:grid-cols-3">
+          <ul className="mt-10 grid grid-cols-[repeat(auto-fill,minmax(min(100%,15rem),1fr))] gap-x-6 gap-y-10" data-testid="catalogue">
             {p.items.map((it) => {
               const on = selected?.kind === "item" && selected.item.id === it.id;
               return (
-                <li key={it.id} className={`flex flex-col outline-offset-4 ${on ? "outline-2 outline-ink" : ""}`}>
-                  <div className="relative aspect-[4/5] bg-raised">
-                    <Image src={`/reference/${it.file}`} alt={it.title} fill sizes="(min-width: 1280px) 22vw, (min-width: 640px) 40vw, 92vw" className="object-contain p-4" />
+                <li key={it.id} className={`flex min-w-0 flex-col outline-offset-4 ${on ? "outline-2 outline-ink" : ""}`}>
+                  <div className="relative aspect-[5/4] bg-raised">
+                    <Image src={`/reference/${it.file}`} alt={it.title} fill sizes="(min-width: 1024px) 26vw, (min-width: 640px) 44vw, 92vw" className="object-contain p-3" />
                   </div>
                   <div className="flex flex-1 flex-col pt-4">
                     <p className="eyebrow plain">{CAT_LABEL[it.category]}</p>
@@ -117,7 +117,7 @@ export function OptionsView(p: Props) {
             })}
           </ul>
         ) : (
-          <p className="mt-8 bg-raised p-5 text-ink-2">We don&rsquo;t have a licensed reference item that fits this finding without breaking another of your rules. You can try your own item below.</p>
+          <p className="mt-8 bg-raised p-5 text-ink-2">None of our licensed reference items is known to meet this requirement without breaking another of your rules, so we won&rsquo;t suggest one. You can try your own item below — WearCheck can&rsquo;t confirm that it meets the rule either.</p>
         )}
 
         <section className="mt-16 border-t border-line pt-8" aria-labelledby="h-byo">
