@@ -1,7 +1,8 @@
 import "server-only";
-import sharp from "sharp";
+import sharp, { type Metadata, type OutputInfo } from "sharp";
 import { createHash } from "node:crypto";
 import { AppError } from "./errors";
+import { log } from "./log";
 
 export const MAX_UPLOAD_BYTES = 4 * 1024 * 1024; // Vercel request bodies are capped at 4.5 MB; the client downsizes first.
 export const MAX_PIXELS = 40_000_000;
@@ -44,7 +45,7 @@ export async function normalizeImage(buf: Buffer, kind: AssetKind): Promise<Norm
   if (type === "heif") throw new AppError("UNSUPPORTED_FORMAT", "HEIC photos can't be read on our server. Your browser normally converts them; if not, export the photo as JPG or PNG.", 415, true, "REPLACE_FILE");
   if (!type) throw new AppError("UNSUPPORTED_FORMAT", "Please use a JPG, PNG or WebP image.", 415, true, "REPLACE_FILE");
 
-  let meta: sharp.Metadata;
+  let meta: Metadata;
   try {
     meta = await sharp(buf, { limitInputPixels: MAX_PIXELS, failOn: "error" }).metadata();
   } catch {
@@ -66,7 +67,7 @@ export async function normalizeImage(buf: Buffer, kind: AssetKind): Promise<Norm
     );
   }
 
-  let out: { data: Buffer; info: sharp.OutputInfo };
+  let out: { data: Buffer; info: OutputInfo };
   try {
     out = await sharp(buf, { limitInputPixels: MAX_PIXELS, failOn: "error" })
       .rotate()
@@ -74,7 +75,8 @@ export async function normalizeImage(buf: Buffer, kind: AssetKind): Promise<Norm
       .flatten({ background: "#ffffff" })
       .jpeg({ quality: 90, mozjpeg: true })
       .toBuffer({ resolveWithObject: true });
-  } catch {
+  } catch (e) {
+    log.error("image_normalize_failed", e, { kind, format: type, space: meta.space, channels: meta.channels });
     throw new AppError("FILE_UNREADABLE", "We couldn't process that image. Please try another.", 422, true, "REPLACE_FILE");
   }
 
