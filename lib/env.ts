@@ -6,6 +6,8 @@ const schema = z.object({
   YOUCAM_API_BASE: z.url().default("https://yce-api-01.makeupar.com"),
   GEMINI_API_KEY: z.string().min(10),
   GEMINI_MODEL: z.string().min(3).default("gemini-3.5-flash"),
+  // Free-tier model tried only after a 429 on GEMINI_MODEL (verified: gemini-3.1-flash-lite). Leave unset to disable.
+  GEMINI_FALLBACK_MODEL: z.string().min(3).optional(),
   SUPABASE_URL: z.url(),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(20),
   SUPABASE_DB_URL: z.string().startsWith("postgres"),
