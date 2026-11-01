@@ -54,14 +54,14 @@ export const DEMO_CASES: DemoCase[] = [
   {
     slug: "compatible-keep",
     title: "Work dinner, nothing to fix",
-    challenge: "Smart-casual dinner with no stated restrictions.",
-    expected: "If nothing conflicts, WearCheck says so and finishes without any AI preview.",
+    challenge: "Formal dinner: no trainers, and avoid red.",
+    expected: "When every requirement is checked and nothing conflicts, WearCheck says so and finishes without any AI preview.",
     details: {
       event_name: "Team dinner (example)",
       event_type: "work",
-      dress_code: "Smart casual",
+      dress_code: "Formal",
       setting: "indoor",
-      restrictions: "",
+      restrictions: "No trainers\nAvoid red",
       event_date: "",
     },
   },
