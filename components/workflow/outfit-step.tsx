@@ -1,26 +1,14 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { api, ClientApiError, prepareImage } from "@/lib/client";
-import { CameraIcon, UploadIcon } from "../icons";
+import { EDITORIAL } from "@/lib/editorial";
+import { CameraIcon, CheckIcon, UploadIcon } from "../icons";
 
 const CONSENT = "This is my photo, or I have permission from the person shown, and they are an adult. I understand AI-generated previews may change appearance.";
-
-function Silhouette() {
-  return (
-    <svg viewBox="0 0 120 200" className="h-40 text-line-strong" aria-hidden>
-      <g fill="none" stroke="currentColor" strokeWidth="1.5" strokeDasharray="4 4">
-        <rect x="2" y="2" width="116" height="196" />
-        <circle cx="60" cy="30" r="12" />
-        <path d="M42 50c6-4 30-4 36 0l3 34-4 4c3 20 8 42 13 62H30c5-20 10-42 13-62l-4-4z" />
-        <path d="M52 150l-2 30M68 150l2 30" />
-        <path d="M42 180h10M68 180h10" strokeDasharray="0" strokeWidth="2.5" />
-      </g>
-    </svg>
-  );
-}
 
 export function OutfitStep({ checkId, existing }: { checkId: string; existing: { url: string; width: number; height: number } | null }) {
   const router = useRouter();
@@ -28,6 +16,7 @@ export function OutfitStep({ checkId, existing }: { checkId: string; existing: {
   const [consent, setConsent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [drag, setDrag] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const camRef = useRef<HTMLInputElement>(null);
 
@@ -69,62 +58,78 @@ export function OutfitStep({ checkId, existing }: { checkId: string; existing: {
   }
 
   return (
-    <div className="max-w-3xl">
-      <h1 className="text-3xl font-bold sm:text-4xl">Show us what you&rsquo;re planning to wear</h1>
-      <p className="mt-3 text-lg text-ink-2">One full-length photo. We&rsquo;ll tell you what we can and can&rsquo;t see.</p>
+    <div>
+      <p className="eyebrow plain">Step 2 · Your outfit</p>
+      <h1 className="t-2 mt-3 max-w-[22ch]">Show us what you&rsquo;re planning to wear</h1>
+      <p className="lede mt-4 max-w-[46ch]">One full-length photo. We&rsquo;ll tell you what we can and can&rsquo;t see.</p>
 
-      {photo ? (
-        <figure className="mt-8">
-          <div className="flex justify-center border border-line bg-raised p-2">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={photo.url} alt="Your outfit photo" className="max-h-[70vh] w-auto max-w-full object-contain" />
-          </div>
-          <figcaption className="mt-2 text-sm text-muted">{photo.width}×{photo.height}px · {photo.saved ? "Saved to this check" : "Not uploaded yet"}</figcaption>
-          <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2">
-            <button type="button" className="btn btn-quiet sm:hidden" onClick={() => camRef.current?.click()} disabled={busy}>Retake</button>
-            <button type="button" className="btn btn-quiet" onClick={() => fileRef.current?.click()} disabled={busy}>Change photo</button>
-          </div>
-        </figure>
-      ) : (
-        <div
-          onDragOver={(e) => e.preventDefault()}
-          onDrop={(e) => { e.preventDefault(); onFile(e.dataTransfer.files[0]); }}
-          className="mt-8 flex flex-col items-center gap-6 border border-dashed border-line-strong bg-raised px-6 py-10 text-center sm:flex-row sm:text-left"
-        >
-          <Silhouette />
-          <div className="flex-1">
-            <p className="font-medium">Stand back so your whole outfit — shoes included — is in the frame.</p>
-            <div className="mt-5 flex flex-col gap-3 sm:flex-row">
-              <button type="button" className="btn btn-secondary" onClick={() => camRef.current?.click()}><CameraIcon className="size-5" /> Take photo</button>
-              <button type="button" className="btn btn-secondary" onClick={() => fileRef.current?.click()}><UploadIcon className="size-5" /> Choose from gallery</button>
+      <div className="mt-8 grid gap-8 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] md:gap-10 xl:grid-cols-[minmax(0,6fr)_minmax(0,5fr)]">
+        <div className="min-w-0">
+          {photo ? (
+            <figure>
+              <div className="flex justify-center bg-photo">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={photo.url} alt="Your outfit photo" className="max-h-[72vh] w-auto max-w-full object-contain" />
+              </div>
+              <figcaption className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                <span className="text-[0.9rem] text-muted">{photo.width}×{photo.height}px · {photo.saved ? "Saved to this check" : "Not uploaded yet"}</span>
+                <span className="flex gap-5">
+                  <button type="button" className="btn btn-quiet sm:hidden" onClick={() => camRef.current?.click()} disabled={busy}>Retake</button>
+                  <button type="button" className="btn btn-quiet" onClick={() => fileRef.current?.click()} disabled={busy}>Change photo</button>
+                </span>
+              </figcaption>
+            </figure>
+          ) : (
+            <div
+              onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
+              onDragLeave={() => setDrag(false)}
+              onDrop={(e) => { e.preventDefault(); setDrag(false); onFile(e.dataTransfer.files[0]); }}
+              className={`flex aspect-[4/5] max-h-[72vh] w-full flex-col items-center justify-center border border-dashed px-6 text-center transition-colors ${drag ? "border-ink bg-sunk" : "border-line-strong bg-raised"}`}
+            >
+              <CameraIcon className="size-9 text-ink-2" />
+              <p className="mt-5 max-w-[24ch] font-display text-xl font-semibold leading-snug">Stand back so your whole outfit — shoes included — is in frame.</p>
+              <div className="mt-7 flex w-full flex-col gap-3 sm:w-auto">
+                <button type="button" className="btn btn-primary" onClick={() => camRef.current?.click()}><CameraIcon className="size-5" /> Take photo</button>
+                <button type="button" className="btn btn-secondary" onClick={() => fileRef.current?.click()}><UploadIcon className="size-5" /> Choose from gallery</button>
+              </div>
+              <p className="mt-4 hidden text-[0.9rem] text-muted sm:block">Or drag a photo here.</p>
             </div>
-            <p className="mt-3 hidden text-sm text-muted sm:block">Or drag a photo here.</p>
+          )}
+          <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" className="sr-only" aria-label="Choose outfit photo" onChange={(e) => onFile(e.target.files?.[0])} />
+          <input ref={camRef} type="file" accept="image/*" capture="environment" className="sr-only" aria-label="Take outfit photo" onChange={(e) => onFile(e.target.files?.[0])} />
+        </div>
+
+        <div className="min-w-0">
+          <div className="flex gap-4 bg-raised p-4">
+            <div className="relative aspect-[4/5] w-24 flex-none overflow-hidden bg-photo sm:w-28">
+              <Image src={EDITORIAL.guideGood.src} alt="Example of a good photo: one person standing, head to feet in frame." fill sizes="112px" className="object-cover" />
+            </div>
+            <div className="min-w-0">
+              <p className="font-semibold">A photo that works</p>
+              <ul className="mt-2 space-y-1.5 text-[0.95rem] text-ink-2">
+                {["One person, standing", "Head to feet in frame", "Daylight, plain background"].map((t) => (
+                  <li key={t} className="flex gap-2"><CheckIcon className="mt-1 size-4 flex-none text-ok" />{t}</li>
+                ))}
+              </ul>
+              <Link href="/help#photos" className="link mt-2 inline-block text-[0.9rem]">More photo examples</Link>
+            </div>
+          </div>
+
+          {photo && !photo.saved ? (
+            <label className="mt-6 flex cursor-pointer items-start gap-3 border border-ink p-4">
+              <input type="checkbox" className="mt-1 size-5 shrink-0 accent-[var(--ink)]" checked={consent} onChange={(e) => setConsent(e.target.checked)} />
+              <span className="text-[0.95rem] leading-relaxed">{CONSENT}</span>
+            </label>
+          ) : null}
+
+          {error ? <p role="alert" className="mt-6 border-l-2 border-bad pl-3 font-medium">{error}</p> : null}
+          <div className="sticky bottom-0 -mx-[clamp(1rem,4vw,3.5rem)] mt-8 border-t border-line bg-bg/95 px-[clamp(1rem,4vw,3.5rem)] pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 md:static md:mx-0 md:border-0 md:bg-transparent md:p-0">
+            <button type="button" className="btn btn-primary w-full md:w-auto" disabled={!photo || busy || (!photo.saved && !consent)} onClick={onContinue} aria-busy={busy}>
+              {busy ? "Uploading…" : "Continue to findings"}
+            </button>
+            <p className="mt-3 text-[0.9rem] text-muted" role="status" aria-live="polite">{busy ? "Checking the image…" : "Your photo is stored privately for this check only."}</p>
           </div>
         </div>
-      )}
-      <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" className="sr-only" aria-label="Choose outfit photo" onChange={(e) => onFile(e.target.files?.[0])} />
-      <input ref={camRef} type="file" accept="image/*" capture="environment" className="sr-only" aria-label="Take outfit photo" onChange={(e) => onFile(e.target.files?.[0])} />
-
-      <ul className="mt-6 grid gap-3 text-sm sm:grid-cols-3">
-        {["One person", "Face and clothing visible", "Include your shoes for a shoe check"].map((t) => (
-          <li key={t} className="border-t border-line pt-3">{t}</li>
-        ))}
-      </ul>
-      <p className="mt-3 text-sm text-muted"><Link href="/help" className="underline">See photo examples</Link></p>
-
-      {photo && !photo.saved ? (
-        <label className="mt-8 flex items-start gap-3 border border-line bg-raised p-4">
-          <input type="checkbox" className="mt-1 size-5 shrink-0" checked={consent} onChange={(e) => setConsent(e.target.checked)} />
-          <span className="text-sm leading-relaxed">{CONSENT}</span>
-        </label>
-      ) : null}
-
-      {error ? <p role="alert" className="mt-6 border-l-2 border-bad pl-3 font-medium">{error}</p> : null}
-      <div className="sticky bottom-0 -mx-4 mt-8 border-t border-line bg-bg/95 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 sm:static sm:mx-0 sm:border-0 sm:bg-transparent sm:p-0">
-        <button type="button" className="btn btn-primary w-full sm:w-auto" disabled={!photo || busy || (!photo.saved && !consent)} onClick={onContinue}>
-          {busy ? "Uploading…" : "Continue"}
-        </button>
-        <p className="mt-3 text-sm text-muted" role="status" aria-live="polite">{busy ? "Checking the image…" : "You can finish this check without signing up."}</p>
       </div>
     </div>
   );
