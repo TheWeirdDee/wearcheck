@@ -1,7 +1,7 @@
 import "server-only";
 import { db } from "./db";
 import { log } from "./log";
-import { removeObjects } from "./storage";
+import { listCheckObjects, removeObjects } from "./storage";
 
 /**
  * Deletion and retention — scoped strictly to WearCheck rows (wearcheck schema) and
@@ -12,14 +12,17 @@ import { removeObjects } from "./storage";
 /** Deletes a check's stored images, then its rows (FK cascades). Usage ledger rows keep only counts. */
 export async function deleteCheck(checkId: string) {
   const sql = db();
+  // Revoke access first: no route can serve these assets, and saveAsset stops accepting new rows.
+  await sql`update wearcheck.checks set status = 'deleted', updated_at = now() where id = ${checkId}`;
   const assets = await sql`select storage_key from wearcheck.media_assets where check_id = ${checkId}`;
   const keys = assets.map((a) => a.storage_key as string).filter((k) => k.startsWith(`checks/${checkId}/`));
-  // Revoke access first so no route can serve these assets while bytes are being removed.
-  await sql`update wearcheck.checks set status = 'deleted', updated_at = now() where id = ${checkId}`;
   await removeObjects(keys);
+  // Sweep this check's own prefix for objects without a row (a save racing the deletion, a failed insert).
+  const orphans = (await listCheckObjects(checkId)).filter((k) => !keys.includes(k));
+  await removeObjects(orphans);
   await sql`insert into wearcheck.product_events (check_id, event_name) values (null, 'check_deleted')`;
   await sql`delete from wearcheck.checks where id = ${checkId}`;
-  return { deletedAssets: keys.length };
+  return { deletedAssets: keys.length + orphans.length };
 }
 
 /**
