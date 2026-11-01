@@ -1,4 +1,4 @@
-import type { ColourFamily, FootwearStyle, RenderCategory, Requirements, Finding } from "./schemas";
+import { RenderCategory, type ColourFamily, type FootwearStyle, type Requirements, type Finding } from "./schemas";
 
 /**
  * Curated, licence-documented reference items (PRD §9). Files live in /public/reference with
@@ -156,6 +156,14 @@ export function availableCategories(): Partial<Record<RenderCategory, boolean>> 
   const out: Partial<Record<RenderCategory, boolean>> = {};
   for (const c of CATALOGUE) if (c.enabled) out[c.category] = true;
   return out;
+}
+
+/**
+ * Categories a preview can be offered for: every YouCam-supported category, because the options
+ * page always lets people upload their own item when no licensed reference fits (e.g. a top).
+ */
+export function previewableCategories(): Record<RenderCategory, boolean> {
+  return Object.fromEntries(RenderCategory.options.map((c) => [c, true])) as Record<RenderCategory, boolean>;
 }
 
 /** Filters to items that address the finding without breaking any other confirmed rule. Max 3. */
