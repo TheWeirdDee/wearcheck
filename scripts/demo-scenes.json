@@ -1,0 +1,220 @@
+{
+ "total": 180,
+ "scenes": [
+  {
+   "id": "s1",
+   "target": 14,
+   "title": "1 · The problem, and the outcome",
+   "badge": "Real YouCam Clothes V4 result\nfrom the run shown at 1:00",
+   "pieces": [
+    {
+     "from": "r1_slide-0.5",
+     "to": "r1_zoom"
+    },
+    {
+     "from": "r1_zoom",
+     "to": "r1_zoom_end",
+     "max": 6.5
+    }
+   ],
+   "vo": "You have an invitation and an outfit, but you're unsure whether they match. WearCheck checks the stated requirements and helps you preview the smallest change."
+  },
+  {
+   "id": "s2",
+   "target": 25,
+   "title": "2 · Invitation and confirmation",
+   "badge": "Sample invitation\ncreated for this demo — not a real event",
+   "note": "Google Gemini reads the text and proposes requirements, each quoted from the invitation. You confirm or edit them.",
+   "pieces": [
+    {
+     "from": "inv_start",
+     "to": "inv_wait0"
+    },
+    {
+     "from": "inv_wait0",
+     "to": "inv_wait1",
+     "wait": "Google Gemini reading the invitation"
+    },
+    {
+     "from": "inv_wait1",
+     "to": "req_confirm",
+     "max": 9.5
+    },
+    {
+     "from": "req_confirm-4",
+     "to": "req_confirm+1.5"
+    }
+   ],
+   "vo": "Upload the invitation. This one is a sample made for the demo. Google Gemini reads it and quotes each requirement word for word: formal, flats or wedges on the lawn, and please avoid white or ivory. You confirm them before anything is judged."
+  },
+  {
+   "id": "s3",
+   "target": 20,
+   "title": "3 · Outfit photo and finding",
+   "badge": "Photo: the project owner,\nshown with their permission",
+   "pieces": [
+    {
+     "from": "outfit_start",
+     "to": "consent+3",
+     "max": 6
+    },
+    {
+     "from": "ass_wait0-1",
+     "to": "ass_wait0"
+    },
+    {
+     "from": "ass_wait0",
+     "to": "ass_wait1",
+     "wait": "Google Gemini reading the photo"
+    },
+    {
+     "from": "ass_wait1",
+     "to": "ass_also",
+     "max": 9.5
+    }
+   ],
+   "vo": "Next, one full-length photo, with consent. The finding names the exact rule it comes from. The invitation says please avoid white or ivory, and the photo shows a white shirt."
+  },
+  {
+   "id": "s4",
+   "target": 40,
+   "title": "4 · First try-on: a garment",
+   "badge": "YouCam Clothes V4\n(cloth-v4) — garment try-on",
+   "note": "Reference image: ChristianGlaeser, CC BY-SA 3.0. Visual reference, not a shopping listing.",
+   "pieces": [
+    {
+     "from": "opt1_start+0.5",
+     "to": "r1_generate+0.8",
+     "max": 7
+    },
+    {
+     "from": "r1_generate+0.8",
+     "to": "r1_wait1",
+     "wait": "YouCam Clothes V4: upload, task and generation"
+    },
+    {
+     "from": "r1_wait1+0.3",
+     "to": "r1_zoom_end+1.2"
+    }
+   ],
+   "vo": "WearCheck suggests one change, from licensed reference images, not shopping listings. Generate sends the photo and the blue shirt to YouCam's Clothes V4 API, the garment try-on. The wait is sped up here. Compare the original and the AI preview, drag the slider, then zoom in on the change. The blue shirt replaced the white shirt, and the vest and tie too. WearCheck doesn't re-check the image, so you judge it."
+  },
+  {
+   "id": "s5",
+   "target": 30,
+   "title": "5 · Second try-on: shoes",
+   "badge": "YouCam Shoes V3\n(shoes-transfer) — footwear try-on",
+   "note": "Reference image: Justin Schneider, CC BY-SA 4.0. Visual reference, not a shopping listing.",
+   "pieces": [
+    {
+     "from": "ass2_start",
+     "to": "opt2_start",
+     "max": 3.5
+    },
+    {
+     "from": "opt2_start",
+     "to": "r2_generate+0.8",
+     "max": 4
+    },
+    {
+     "from": "r2_generate+0.8",
+     "to": "r2_wait1",
+     "wait": "YouCam Shoes V3: upload, task and generation"
+    },
+    {
+     "from": "r2_ai-0.3",
+     "to": "r2_zoom_end+0.8"
+    }
+   ],
+   "vo": "The shoes were flagged too: the invitation recommends flats or wedges. This second run uses YouCam's Shoes V3 API, with a tan cap-toe oxford. The whole photo stays in view, and the zoom shows the new shoes up close."
+  },
+  {
+   "id": "s6",
+   "target": 20,
+   "title": "6 · Decision and card",
+   "badge": "Downloaded file opened:\nwearcheck-decision-card.png",
+   "pieces": [
+    {
+     "from": "choose-0.3",
+     "to": "decision+1.5"
+    },
+    {
+     "from": "download-0.5",
+     "to": "download+1.5"
+    },
+    {
+     "from": "card_open",
+     "to": "card_open+3"
+    },
+    {
+     "from": "card_zoom",
+     "to": "card_end",
+     "max": 9
+    }
+   ],
+   "vo": "Choose the result you prefer, and download the decision card. Opening the downloaded file shows the original and the preview, the invitation's requirement, and the recommendation."
+  },
+  {
+   "id": "s7",
+   "target": 16,
+   "title": "7 · No change needed",
+   "badge": "Separate check · no render",
+   "note": "Details typed in for a smart-casual dinner with no restrictions.",
+   "pieces": [
+    {
+     "from": "keep_start+0.5",
+     "to": "keep_entered",
+     "max": 4,
+     "src": "take4"
+    },
+    {
+     "from": "keep_wait0-1",
+     "to": "keep_wait0",
+     "src": "take4"
+    },
+    {
+     "from": "keep_wait0",
+     "to": "keep_wait1",
+     "wait": "Google Gemini reading the photo",
+     "src": "take4"
+    },
+    {
+     "from": "keep_wait1",
+     "to": "keep_decision",
+     "max": 4.5,
+     "src": "take4"
+    },
+    {
+     "from": "keep_decision",
+     "to": "keep_end",
+     "max": 3.5,
+     "src": "take4"
+    }
+   ],
+   "vo": "A different occasion: a smart-casual dinner with no restrictions. There's nothing to change, so there's no render at all. Keeping what you own is a successful outcome.",
+   "cutNote": "Edited for time: jump cuts between real steps.\nRecorded in a second session, 16:19 UTC"
+  },
+  {
+   "id": "s8",
+   "target": 15,
+   "title": "8 · On a phone",
+   "badge": "Mobile viewport 390 × 844\nsame live check",
+   "note": "Previews illustrate appearance. They don't guarantee fit or organiser approval.\n\nWearCheck\nwearcheck.vercel.app",
+   "pieces": [
+    {
+     "src": "mobile",
+     "from": "m_start-0.5",
+     "to": "m_end",
+     "max": 14.5
+    }
+   ],
+   "vo": "The same check works on a phone, with the same comparison controls. Previews illustrate appearance. They don't guarantee fit or organiser approval. WearCheck, at wearcheck dot vercel dot app.",
+   "captions": [
+    "The same check works on a phone, with the same comparison controls.",
+    "Previews illustrate appearance. They don't guarantee fit or organiser approval.",
+    "WearCheck — wearcheck.vercel.app"
+   ],
+   "cutNote": "Recorded in a second session, 16:19 UTC"
+  }
+ ]
+}
