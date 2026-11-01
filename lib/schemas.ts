@@ -175,6 +175,16 @@ export type UserCorrections = z.infer<typeof UserCorrections>;
 
 // ---------- findings ----------
 export const RenderCategory = z.enum(["shoes", "full_body", "upper_body", "outer"]);
+
+/** Body of POST /api/render-jobs. `findingId` is a rule finding id or "voluntary:<category>". */
+export const RenderJobRequest = z.object({
+  checkId: z.uuid(),
+  findingId: z.string().max(40),
+  itemId: z.string().max(64).optional(),
+  userAssetId: z.uuid().optional(),
+  userCategory: RenderCategory.optional(),
+  retry: z.boolean().optional(),
+});
 export type RenderCategory = z.infer<typeof RenderCategory>;
 
 export type FindingArea = "clothing" | "colour" | "shoes_venue";
