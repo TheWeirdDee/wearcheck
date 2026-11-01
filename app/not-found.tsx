@@ -5,11 +5,14 @@ export default function NotFound() {
   return (
     <>
       <SiteHeader />
-      <main id="main" className="mx-auto max-w-xl px-4 py-20 sm:px-6">
-        <p className="eyebrow">404</p>
-        <h1 className="mt-3 text-4xl font-bold">This page doesn&rsquo;t exist</h1>
-        <p className="mt-4 text-ink-2">If you were looking for a check, it may have been deleted or expired.</p>
-        <Link href="/" className="btn btn-primary mt-8">Go to WearCheck</Link>
+      <main id="main" className="wrap max-w-3xl py-20 lg:py-28">
+        <p className="eyebrow">Page not found</p>
+        <h1 className="t-1 mt-5">This page doesn&rsquo;t exist.</h1>
+        <p className="lede mt-5">If you were looking for a check, it may have been deleted or expired — checks are kept for 24 hours.</p>
+        <div className="mt-9 flex flex-wrap gap-4">
+          <Link href="/" className="btn btn-primary">Go to WearCheck</Link>
+          <Link href="/help" className="btn btn-secondary">Help</Link>
+        </div>
       </main>
     </>
   );
