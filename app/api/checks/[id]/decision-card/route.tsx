@@ -6,7 +6,7 @@ import sharp from "sharp";
 import { handler } from "@/lib/api";
 import { requireOwnedCheck, trackEvent } from "@/lib/checks";
 import { db } from "@/lib/db";
-import { CARD_DISCLAIMER, dressCodeSource, loadDecision, SOURCE_LABEL, unresolvedNote } from "@/lib/decision";
+import { CARD_DISCLAIMER, dressCodeSource, loadDecision, outcomeText, RECHECK_LABEL, SOURCE_LABEL } from "@/lib/decision";
 import { AppError } from "@/lib/errors";
 import { getObject } from "@/lib/storage";
 
@@ -50,15 +50,14 @@ export const GET = handler("decision_card", async (req: Request, ctx: { params: 
   const r = d.requirements;
   const kf = d.keyFinding;
   const keep = d.decision === "keep";
-  const title = keep ? "Keep what you have" : "Consider this one change";
-  const recommendation = keep
-    ? d.result.status === "compatible" ? "No change needed. Nothing in your confirmed requirements conflicts with this outfit." : `You chose to keep this outfit.${kf ? ` Noted: ${kf.observation}` : ""}`
-    : kf ? `${kf.observation} ${kf.reason}` : "Preview the suggested change.";
+  const text = outcomeText(d);
+  const title = text.title.replace(/\.$/, "");
+  const recommendation = text.recommendation;
   const evidence = kf?.evidence_text ? `“${kf.evidence_text}” · ${SOURCE_LABEL[kf.evidence_source] ?? ""}` : kf ? SOURCE_LABEL[kf.evidence_source] ?? "" : "";
   const occasion = r.event_name ?? (r.event_type ? r.event_type[0].toUpperCase() + r.event_type.slice(1) : "Your occasion");
   const date = r.event_date ? new Date(`${r.event_date}T12:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }) : null;
   const itemLine = d.item ? `${d.item.title} — ${d.item.creator}, ${d.item.licence}. Visual reference, not a shopping listing.` : d.userRefAssetId ? "Reference item provided by you." : null;
-  const note = !keep && kf ? unresolvedNote(kf, r) : null;
+  const note = keep ? null : `${RECHECK_LABEL[d.recheck?.state ?? "none"]}${d.recheck ? `: ${d.recheck.note}` : "."}`;
   const stamp = new Date(d.generatedAt).toISOString().replace("T", " ").slice(0, 16) + " UTC";
 
   const label = (text: string, dark = false) => (
@@ -80,7 +79,7 @@ export const GET = handler("decision_card", async (req: Request, ctx: { params: 
         <div style={{ display: "flex", flexDirection: "column", marginTop: 28 }}>
           <div style={{ fontSize: 24, color: C.muted }}>{[occasion, date].filter(Boolean).join(" · ")}</div>
           <div style={{ fontFamily: "Inter Tight", fontWeight: 700, fontSize: 64, letterSpacing: -1.5, lineHeight: 1.05, marginTop: 8 }}>{title}</div>
-          <div style={{ fontSize: 24, marginTop: 10, color: keep && d.result.status === "compatible" ? C.ok : C.accent, fontWeight: 600 }}>{d.result.headline}</div>
+          <div style={{ fontSize: 24, marginTop: 10, color: (keep && d.result.status === "compatible") || d.recheck?.state === "appears_resolved" ? C.ok : C.accent, fontWeight: 600 }}>{d.result.headline}</div>
         </div>
         <div style={{ display: "flex", gap: 20, marginTop: 28, justifyContent: twoUp ? "space-between" : "center" }}>
           <div style={{ display: "flex", position: "relative", width: imgW, height: imgH }}>
