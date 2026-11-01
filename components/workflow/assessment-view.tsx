@@ -8,10 +8,10 @@ import { COLOUR_FAMILIES, COLOUR_LABEL, FOOTWEAR_LABEL, FOOTWEAR_STYLES, type As
 import { CheckIcon, ChevronIcon } from "../icons";
 
 const BADGE: Record<AssessmentResult["status"], { cls: string }> = {
-  compatible: { cls: "border-ok text-ok" },
-  consider_change: { cls: "border-warn text-warn" },
-  conflict: { cls: "border-bad text-bad" },
-  insufficient: { cls: "border-line-strong text-ink-2" },
+  compatible: { cls: "bg-ok" },
+  consider_change: { cls: "bg-warn" },
+  conflict: { cls: "bg-bad" },
+  insufficient: { cls: "bg-line-strong" },
 };
 const ROW_LABEL = { no_issue: "No clear issue", needs_look: "Needs a look", conflict: "Conflicts with a stated rule", cant_assess: "Can't assess" } as const;
 const KIND_LABEL: Record<Finding["kind"], string> = {
@@ -101,14 +101,15 @@ export function AssessmentView(p: Props) {
   // ---------- running / error ----------
   if (!data) {
     return (
-      <div className="grid gap-6 md:grid-cols-[1fr_280px]">
+      <div className="grid gap-8 md:grid-cols-[minmax(0,1fr)_minmax(0,20rem)] md:gap-12">
         <div>
-          <p className="eyebrow">{p.eventLabel}</p>
-          <h1 className="mt-2 text-3xl font-bold">Checking your outfit</h1>
-          <ol className="mt-6 space-y-3" aria-live="polite">
+          <p className="eyebrow plain">Step 3 · {p.eventLabel}</p>
+          <h1 className="t-2 mt-3">Checking your outfit</h1>
+          <p className="lede mt-4 max-w-[40ch]">Reading what&rsquo;s visible in your photo, then comparing it with the requirements you confirmed.</p>
+          <ol className="mt-8 divide-y divide-line border-y border-line" aria-live="polite">
             {STAGES.map((s, i) => (
-              <li key={s} className={`flex items-center gap-3 ${i <= stage ? "text-ink" : "text-muted"}`}>
-                <span className={`inline-flex size-6 items-center justify-center border ${i < stage ? "border-ink bg-ink text-bg" : i === stage && !error ? "border-ink" : "border-line"}`}>
+              <li key={s} className={`flex items-center gap-4 py-4 text-[1.02rem] ${i <= stage ? "text-ink" : "text-muted"}`}>
+                <span className={`inline-flex size-7 flex-none items-center justify-center border ${i < stage ? "border-ink bg-ink text-bg" : i === stage && !error ? "border-ink" : "border-line"}`}>
                   {i < stage ? <CheckIcon /> : i === stage && !error ? <span className="size-2 animate-pulse bg-ink" /> : null}
                 </span>
                 {s}
@@ -119,15 +120,15 @@ export function AssessmentView(p: Props) {
             <div role="alert" className="mt-8 border-l-2 border-bad bg-raised p-4">
               <p className="font-medium">{error.message}</p>
               <div className="mt-3 flex flex-wrap gap-4">
-                <button type="button" className="btn btn-secondary min-h-10 px-4 text-sm" onClick={() => run()}>Try again</button>
-                <Link href={`/check/${p.checkId}/requirements`} className="btn btn-quiet text-sm">Edit requirements</Link>
-                <Link href={`/check/${p.checkId}/outfit`} className="btn btn-quiet text-sm">Change photo</Link>
+                <button type="button" className="btn btn-secondary btn-sm" onClick={() => run()}>Try again</button>
+                <Link href={`/check/${p.checkId}/requirements`} className="btn btn-quiet text-[0.95rem]">Edit requirements</Link>
+                <Link href={`/check/${p.checkId}/outfit`} className="btn btn-quiet text-[0.95rem]">Change photo</Link>
               </div>
             </div>
           ) : null}
         </div>
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={`${p.photoUrl}?size=thumb`} alt="Your outfit photo" className="w-full max-w-[280px] border border-line object-contain" />
+        <div className="relative overflow-hidden bg-photo"><img src={`${p.photoUrl}?size=thumb`} alt="Your outfit photo" className="max-h-[60vh] w-full object-contain" />{!error ? <span aria-hidden className="wc-scan absolute inset-0" /> : null}</div>
       </div>
     );
   }
@@ -141,28 +142,28 @@ export function AssessmentView(p: Props) {
 
   return (
     <div>
-      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
-        <figure className="order-2 lg:order-1">
+      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] lg:gap-12">
+        <figure className="order-2 lg:sticky lg:top-28 lg:order-1 lg:self-start">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={p.photoUrl} alt="Your original outfit photo" className="max-h-[72vh] w-full border border-line bg-raised object-contain" />
-          <figcaption className="mt-2 text-xs text-muted">Original photo</figcaption>
+          <img src={p.photoUrl} alt="Your original outfit photo" className="aspect-[4/5] max-h-[76vh] w-full bg-photo object-contain" />
+          <figcaption className="photo-credit mt-3">Your original photo</figcaption>
         </figure>
         <div className="order-1 lg:order-2">
-          <p className="eyebrow">{p.eventLabel}</p>
-          <p className={`mt-3 inline-flex border px-3 py-1.5 text-sm font-semibold ${BADGE[res.status].cls}`}>{res.headline}</p>
-          <h1 ref={headingRef} tabIndex={-1} className="mt-4 text-2xl font-bold leading-snug outline-none sm:text-3xl">
+          <p className="eyebrow plain">Step 3 · {p.eventLabel}</p>
+          <p className="mt-4 inline-flex items-center gap-2.5 bg-raised px-3 py-2 text-[0.95rem] font-semibold"><span aria-hidden className={`size-2.5 rounded-full ${BADGE[res.status].cls}`} />{res.headline}</p>
+          <h1 ref={headingRef} tabIndex={-1} className="t-2 mt-5 outline-none">
             {key ? key.observation : compatible ? "Nothing in your confirmed requirements conflicts with this outfit." : "We need a bit more information."}
           </h1>
-          {key ? <p className="mt-3 text-lg leading-relaxed text-ink-2">{key.reason}</p> : null}
+          {key ? <p className="lede mt-4">{key.reason}</p> : null}
           {compatible ? <p className="mt-3 text-ink-2">This isn&rsquo;t approval from your host — it means we found no conflict with what you confirmed.</p> : null}
 
           {key ? (
             <div className="mt-4">
-              <button type="button" className="inline-flex items-center gap-1 text-sm font-semibold underline underline-offset-4" aria-expanded={why} onClick={() => setWhy((w) => !w)}>
+              <button type="button" className="inline-flex min-h-11 items-center gap-1 text-[0.95rem] font-semibold underline underline-offset-4" aria-expanded={why} onClick={() => setWhy((w) => !w)}>
                 Why? <ChevronIcon className={`size-4 transition ${why ? "rotate-180" : ""}`} />
               </button>
               {why ? (
-                <dl className="mt-3 space-y-2 border-l-2 border-ink pl-4 text-sm">
+                <dl className="mt-2 space-y-2 border-l-2 border-ink pl-4 text-[0.95rem]">
                   <div><dt className="inline font-semibold">Type: </dt><dd className="inline">{KIND_LABEL[key.kind]}</dd></div>
                   <div><dt className="inline font-semibold">Source: </dt><dd className="inline">{SOURCE_LABEL[key.evidence_source]}</dd></div>
                   {key.evidence_text ? <div><dt className="inline font-semibold">Exact text: </dt><dd className="inline italic">“{key.evidence_text}”</dd></div> : null}
@@ -173,12 +174,12 @@ export function AssessmentView(p: Props) {
           ) : null}
 
           {res.clarification ? (
-            <fieldset className="mt-6 border border-ink p-4" disabled={busy}>
-              <legend className="px-1 text-sm font-semibold">One question first</legend>
-              <p className="font-medium">{res.clarification.question}</p>
-              <div className="mt-3 flex flex-wrap gap-2">
+            <fieldset className="mt-8 bg-accent-soft p-5" disabled={busy}>
+              <legend className="float-left mb-2 w-full text-[0.875rem] font-semibold uppercase tracking-[0.06em] text-accent">One question first</legend>
+              <p className="clear-both font-display text-xl font-semibold leading-snug">{res.clarification.question}</p>
+              <div className="mt-4 flex flex-wrap gap-2">
                 {res.clarification.options.map((o) => (
-                  <button key={o.value} type="button" className="btn btn-secondary min-h-10 px-4 text-sm"
+                  <button key={o.value} type="button" className="btn btn-secondary btn-sm"
                     onClick={() => {
                       const id = res.clarification!.id;
                       if (id === "main_garment_colour") answer({ main_garment_colour: o.value as ColourFamily });
@@ -189,13 +190,13 @@ export function AssessmentView(p: Props) {
                   </button>
                 ))}
               </div>
-              {busy ? <p role="status" className="mt-2 text-sm text-muted">Updating your assessment…</p> : null}
+              {busy ? <p role="status" className="mt-3 text-[0.95rem] text-ink-2">Updating your assessment…</p> : null}
             </fieldset>
           ) : null}
 
           {error ? <p role="alert" className="mt-4 border-l-2 border-bad pl-3 font-medium">{error.message}</p> : null}
 
-          <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+          <div className="mt-10 flex flex-col gap-3 border-t border-line pt-8 sm:flex-row sm:flex-wrap">
             {canPreview ? (
               <>
                 <Link href={`/check/${p.checkId}/options`} className="btn btn-primary">Preview the smallest change</Link>
@@ -211,52 +212,52 @@ export function AssessmentView(p: Props) {
             )}
           </div>
           <div className="mt-4 flex flex-wrap gap-x-6 gap-y-1">
-            <button type="button" className="btn btn-quiet text-sm" aria-expanded={showCorrect} onClick={() => setShowCorrect((s) => !s)}>Correct my outfit details</button>
-            <Link href={`/check/${p.checkId}/requirements`} className="btn btn-quiet text-sm">Edit event</Link>
-            {key?.user_action === "retake_photo" || !res.shoes_assessable ? <Link href={`/check/${p.checkId}/outfit`} className="btn btn-quiet text-sm">Use a different photo</Link> : null}
+            <button type="button" className="btn btn-quiet text-[0.95rem]" aria-expanded={showCorrect} onClick={() => setShowCorrect((s) => !s)}>Correct my outfit details</button>
+            <Link href={`/check/${p.checkId}/requirements`} className="btn btn-quiet text-[0.95rem]">Edit event</Link>
+            {key?.user_action === "retake_photo" || !res.shoes_assessable ? <Link href={`/check/${p.checkId}/outfit`} className="btn btn-quiet text-[0.95rem]">Use a different photo</Link> : null}
           </div>
 
           {showCorrect ? (
-            <form className="mt-4 grid gap-4 border border-line bg-raised p-4 sm:grid-cols-2" onSubmit={(e) => { e.preventDefault(); answer(corr); }}>
-              <label className="block text-sm"><span className="font-medium">Main garment colour</span>
-                <select className="field mt-1" value={corr.main_garment_colour ?? ""} onChange={(e) => setCorr({ ...corr, main_garment_colour: (e.target.value || undefined) as ColourFamily | undefined })}>
+            <form className="mt-4 grid gap-4 bg-raised p-5 sm:grid-cols-2" onSubmit={(e) => { e.preventDefault(); answer(corr); }}>
+              <label className="block"><span className="label">Main garment colour</span>
+                <select className="field" value={corr.main_garment_colour ?? ""} onChange={(e) => setCorr({ ...corr, main_garment_colour: (e.target.value || undefined) as ColourFamily | undefined })}>
                   <option value="">Use what the photo shows</option>
                   {COLOUR_FAMILIES.map((c) => <option key={c} value={c}>{COLOUR_LABEL[c]}</option>)}
                 </select>
               </label>
-              <label className="block text-sm"><span className="font-medium">Shoe style</span>
-                <select className="field mt-1" value={corr.footwear_style ?? ""} onChange={(e) => setCorr({ ...corr, footwear_style: (e.target.value || undefined) as FootwearStyle | undefined })}>
+              <label className="block"><span className="label">Shoe style</span>
+                <select className="field" value={corr.footwear_style ?? ""} onChange={(e) => setCorr({ ...corr, footwear_style: (e.target.value || undefined) as FootwearStyle | undefined })}>
                   <option value="">Use what the photo shows</option>
                   {FOOTWEAR_STYLES.map((s) => <option key={s} value={s}>{FOOTWEAR_LABEL[s]}</option>)}
                 </select>
               </label>
-              <div className="sm:col-span-2"><button type="submit" className="btn btn-secondary min-h-10 px-4 text-sm" disabled={busy}>Update assessment</button></div>
+              <div className="sm:col-span-2"><button type="submit" className="btn btn-secondary btn-sm" disabled={busy}>Update assessment</button></div>
             </form>
           ) : null}
 
-          {p.hadOlderPreviews ? <p className="mt-6 text-sm text-muted">Earlier previews were made for a previous version of your requirements or photo and are kept separately.</p> : null}
+          {p.hadOlderPreviews ? <p className="mt-6 text-[0.95rem] text-muted">Earlier previews were made for a previous version of your requirements or photo and are kept separately.</p> : null}
         </div>
       </div>
 
       {/* Breakdown */}
-      <section className="mt-12 max-w-3xl" aria-labelledby="h-breakdown">
-        <h2 id="h-breakdown" className="text-xl font-semibold">Breakdown</h2>
+      <section className="mt-16 max-w-[52rem]" aria-labelledby="h-breakdown">
+        <h2 id="h-breakdown" className="t-3">Breakdown</h2>
         <div className="mt-4 divide-y divide-line border-y border-line">
           {(["clothing", "colour", "shoes_venue"] as const).map((area) => {
             const row = res.rows[area];
             const items = res.findings.filter((f) => f.area === area);
             return (
-              <details key={area} className="group py-4">
+              <details key={area} className="group py-5">
                 <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
-                  <span className="font-semibold">{area === "clothing" ? "Clothing" : area === "colour" ? "Colour & restrictions" : "Shoes & venue"}</span>
-                  <span className="flex items-center gap-2 text-sm text-ink-2">{ROW_LABEL[row.status]} <ChevronIcon className="size-4 transition group-open:rotate-180" /></span>
+                  <span className="font-display text-lg font-semibold">{area === "clothing" ? "Clothing" : area === "colour" ? "Colour & restrictions" : "Shoes & venue"}</span>
+                  <span className="flex items-center gap-2 text-[0.95rem] text-ink-2">{ROW_LABEL[row.status]} <ChevronIcon className="size-4 transition group-open:rotate-180" /></span>
                 </summary>
-                <div className="mt-3 space-y-4 text-sm">
+                <div className="mt-4 space-y-4 text-[0.975rem]">
                   {items.length === 0 ? <p className="text-ink-2">{row.summary}</p> : items.map((f) => (
                     <div key={f.id} className="border-l-2 border-line-strong pl-3">
                       <p className="font-medium">{f.observation}</p>
                       <p className="mt-1 text-ink-2">{f.reason}</p>
-                      <p className="mt-1 text-xs text-muted">{KIND_LABEL[f.kind]} · {SOURCE_LABEL[f.evidence_source]}{f.uncertainty ? ` · ${f.uncertainty}` : ""}</p>
+                      <p className="mt-1 text-[0.875rem] text-muted">{KIND_LABEL[f.kind]} · {SOURCE_LABEL[f.evidence_source]}{f.uncertainty ? ` · ${f.uncertainty}` : ""}</p>
                     </div>
                   ))}
                 </div>
@@ -264,8 +265,8 @@ export function AssessmentView(p: Props) {
             );
           })}
         </div>
-        {secondary.length ? <p className="mt-3 text-sm text-muted">{secondary.length} other observation{secondary.length === 1 ? "" : "s"} listed above.</p> : null}
-        <p className="mt-6 text-xs text-muted">We can&rsquo;t judge fabric quality, fit, comfort or heel stability from a photo.</p>
+        {secondary.length ? <p className="mt-3 text-[0.95rem] text-muted">{secondary.length} other observation{secondary.length === 1 ? "" : "s"} listed above.</p> : null}
+        <p className="mt-6 text-[0.9rem] text-muted">We can&rsquo;t judge fabric quality, fit, comfort or heel stability from a photo.</p>
         <button type="button" className="btn btn-quiet mt-2 text-sm" onClick={() => { setData(null); started.current = true; void run({ reobserve: true }); }}>Re-read the photo</button>
       </section>
     </div>
