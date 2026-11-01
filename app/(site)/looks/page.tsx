@@ -17,7 +17,7 @@ export default async function LooksPage() {
     <div className="mx-auto max-w-[900px] px-4 pt-10 sm:px-6 lg:pt-16">
       <p className="eyebrow">This browser</p>
       <h1 className="mt-3 text-4xl font-bold">Your checks</h1>
-      <p className="mt-3 text-ink-2">Checks stay in this browser session for 24 hours. There&rsquo;s no account or cross-device history.</p>
+      <p className="mt-3 text-ink-2">Checks stay open in this browser session for 24 hours, then lock and are deleted within a day. There&rsquo;s no account or cross-device history.</p>
       {rows.length === 0 ? (
         <div className="mt-10 border border-line p-6">
           <p>No checks in this session.</p>
