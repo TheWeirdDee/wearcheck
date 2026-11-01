@@ -1,11 +1,14 @@
 import {
   type AssessmentResult,
+  type CheckLine,
   type Clarification,
   type ColourFamily,
   type Finding,
   type FindingArea,
   type FootwearStyle,
+  type ObservedOutfit,
   type OutfitObservation,
+  type PhotoSupport,
   type RenderCategory,
   type Requirements,
   type Rule,
@@ -55,7 +58,11 @@ export function assess(
       reason: "WearCheck checks one consenting adult per photo.", evidence_text: null, evidence_source: "photo_model",
       uncertainty: null, user_action: "retake_photo", render_category: null, rank: 0,
     });
-    return finalize(findings, null, false, available);
+    const none = { ok: false, reason: "The photo needs to show one person." };
+    return finalize(findings, null, available, {
+      shoesAssessable: false, noRequirements: false, checks: [], garmentsVisible: false, photoRequest: "Use a photo of just you, head to toe.",
+      supports: { shoes: none, full_body: none, upper_body: none, outer: none }, observed: { garments: [], shoe_style: null },
+    });
   }
   const lowConfidenceImage = obs.image_quality === "poor";
   const items = obs.items;
@@ -72,6 +79,19 @@ export function assess(
       reason: "WearCheck only gives a verdict on clothing it can see. Try a brighter, full-length photo, or correct the details yourself.",
       evidence_text: null, evidence_source: "photo_model", uncertainty: "Outfit not clearly visible.",
       user_action: "retake_photo", render_category: null, rank: 2,
+    });
+  }
+  const outdoorsSoftEarly = (req.venue.setting === "outdoor" || req.venue.setting === "mixed") && SOFT_GROUND.has(req.venue.surface);
+  const noRequirements = req.rules.length === 0 && !req.dress_code && !outdoorsSoftEarly;
+  // A cropped photo: say so, and make it blocking when a requirement depends on what's out of frame.
+  if (garments.length > 0 && !obs.full_body_visible) {
+    const needsWholeOutfit = Boolean(req.dress_code) || outdoorsSoftEarly || req.rules.some((r) => r.type !== "colour_exclusion" && r.type !== "colour_request");
+    findings.push({
+      id: id(), rule_id: null, area: "clothing", kind: "visibility", status: "cant_assess",
+      observation: "Only part of your outfit is visible in this photo.",
+      reason: "WearCheck only checks what it can see. For a full check, use a head-to-toe photo in good light, with your shoes in frame.",
+      evidence_text: null, evidence_source: "photo_model", uncertainty: "Outfit partly out of frame.",
+      user_action: "retake_photo", render_category: null, rank: needsWholeOutfit && !noRequirements ? 4 : 70,
     });
   }
 
@@ -171,7 +191,7 @@ export function assess(
   // A footwear rule without a recognised style can't be checked mechanically; it's asked about below instead.
   const isFoot = (r: Rule) => r.type === "footwear_preference" || r.type === "footwear_requirement";
   const footRules = req.rules.filter((r) => isFoot(r) && (r.footwear_avoid.length > 0 || r.footwear_prefer.length > 0));
-  const outdoorsSoft = (req.venue.setting === "outdoor" || req.venue.setting === "mixed") && SOFT_GROUND.has(req.venue.surface);
+  const outdoorsSoft = outdoorsSoftEarly;
   const shoeRenderOk = Boolean(available.shoes) && obs.face_visible;
 
   for (const r of footRules) {
@@ -292,12 +312,67 @@ export function assess(
     clarification = { id: "footwear_style", question: "What kind of shoes are you wearing?", options: (["stiletto_heel", "block_heel", "wedge", "flat", "flat_sandal", "heeled_sandal", "sneaker", "boot", "loafer"] as FootwearStyle[]).map((s) => ({ value: s, label: FOOTWEAR_LABEL[s] })) };
   }
 
-  // "Nothing to check" is not the same as "checked and compatible".
-  const checkedSomething = req.rules.length > 0 || dressCodeChecked || outdoorsSoft;
-  return finalize(findings, clarification, shoesAssessable, available, checkedSomething);
+  // ---------- what was checked, requirement by requirement ----------
+  const worst = (fs: Finding[]): CheckLine["result"] =>
+    fs.some((f) => f.status === "conflict" || f.status === "consider_change") ? "issue" : fs.length && fs.every((f) => f.status === "ok") ? "ok" : "not_checked";
+  const checks: CheckLine[] = req.rules.map((r) => {
+    const fs = findings.filter((f) => f.rule_id === r.id);
+    const result = worst(fs);
+    const top = fs.find((f) => f.status !== "ok") ?? fs[0];
+    return {
+      label: r.evidence_text ?? r.summary, source: sourceLabel(r), result,
+      note: top ? top.observation : "We couldn't check this from the photo.",
+    };
+  });
+  if (req.dress_code) {
+    const d = req.dress_code;
+    const src = d.source === "invitation" ? "invitation" : d.source === "suggested" ? "suggested" : "user";
+    const issue = findings.find((f) => f.kind === "style_suggestion" && f.status === "consider_change");
+    checks.push(
+      d.ambiguous ? { label: `Dress code: ${d.value}`, source: src, result: "not_checked", note: "Open to interpretation, so there's nothing specific to check." }
+        : !dressCodeChecked ? { label: `Dress code: ${d.value}`, source: src, result: "not_checked", note: obs.formality_impression === "unclear" ? "We couldn't judge formality from this photo." : "WearCheck can't compare this dress code to a photo." }
+          : issue ? { label: `Dress code: ${d.value}`, source: src, result: "issue", note: issue.observation }
+            : { label: `Dress code: ${d.value}`, source: src, result: "ok", note: `Reads as ${obs.formality_impression.replace("_", " ")} in the photo (subjective).` },
+    );
+  }
+  if (outdoorsSoft && footRules.length === 0) {
+    const f = findings.find((x) => x.area === "shoes_venue" && x.rule_id === null);
+    checks.push({
+      label: `Venue: outdoors on ${req.venue.surface}`, source: req.venue.source === "invitation" ? "invitation" : "user",
+      result: f ? (f.status === "consider_change" ? "issue" : "not_checked") : shoesAssessable ? "ok" : "not_checked",
+      note: f ? f.observation : shoesAssessable ? "Your shoes suit soft ground." : "Shoes not visible.",
+    });
+  }
+
+  // ---------- what a try-on could replace from this photo ----------
+  const upperVisible = garments.some((g) => ["top", "suit", "dress", "jumpsuit", "outerwear"].includes(g.item.category));
+  const supports: PhotoSupport = {
+    shoes: shoesAssessable ? { ok: true, reason: "Your shoes are clearly visible." } : { ok: false, reason: obs.feet_visible === "yes" ? "Your shoes aren't clear enough in this photo." : "Your feet aren't fully in frame." },
+    full_body: obs.full_body_visible && garments.length > 0 && !lowConfidenceImage ? { ok: true, reason: "Your whole outfit is visible." } : { ok: false, reason: "A full-outfit change needs a head-to-toe photo." },
+    upper_body: upperVisible && !lowConfidenceImage ? { ok: true, reason: "Your top is visible." } : { ok: false, reason: "Your top isn't clearly visible." },
+    outer: upperVisible && !lowConfidenceImage ? { ok: true, reason: "Your upper body is visible." } : { ok: false, reason: "Your upper body isn't clearly visible." },
+  };
+  const observed: ObservedOutfit = {
+    garments: garments.map((g) => ({ category: g.item.category, colour: colourOf(g).colour, description: g.item.description })),
+    shoe_style: shoesAssessable ? style : null,
+  };
+  const photoRequest = findings.find((f) => f.kind === "visibility" && f.user_action === "retake_photo")?.reason ?? null;
+
+  return finalize(findings, clarification, available, { shoesAssessable, noRequirements, checks, garmentsVisible: garments.length > 0, photoRequest, supports, observed });
 }
 
-function finalize(findings: Finding[], clarification: Clarification | null, shoesAssessable: boolean, available: RenderAvailability, checkedSomething = true): AssessmentResult {
+type Context = {
+  shoesAssessable: boolean;
+  noRequirements: boolean;
+  checks: CheckLine[];
+  garmentsVisible: boolean;
+  photoRequest: string | null;
+  supports: PhotoSupport;
+  observed: ObservedOutfit;
+};
+
+function finalize(findings: Finding[], clarification: Clarification | null, available: RenderAvailability, ctx: Context): AssessmentResult {
+  const { shoesAssessable } = ctx;
   const rankKey = (f: Finding) => {
     const statusWeight = f.status === "conflict" ? 0 : f.status === "consider_change" ? 100 : f.status === "cant_assess" ? 200 : 300;
     const feasible = f.render_category && available[f.render_category] && f.user_action !== "none" ? 0 : 5;
@@ -308,27 +383,37 @@ function finalize(findings: Finding[], clarification: Clarification | null, shoe
   const hasChange = sorted.some((f) => f.status === "consider_change");
   const material = sorted.some((f) => f.status === "cant_assess" && f.rank <= 5);
 
-  const status: AssessmentResult["status"] = hasConflict ? "conflict"
-    : clarification || material ? "insufficient"
-      : hasChange ? "consider_change" : "compatible";
+  // "Compatible" needs at least one requirement actually checked; nothing supplied is its own state.
+  const anyChecked = ctx.checks.some((c) => c.result === "ok");
+  const status: AssessmentResult["status"] = ctx.noRequirements ? "no_requirements"
+    : hasConflict ? "conflict"
+      : clarification || material ? "insufficient"
+        : hasChange ? "consider_change"
+          : anyChecked ? "compatible" : "insufficient";
 
   const key = sorted.find((f) => f.status === "conflict" || f.status === "consider_change") ?? (status === "insufficient" ? sorted.find((f) => f.status === "cant_assess") : null) ?? null;
   const action = key && key.render_category && key.user_action !== "none" && key.user_action !== "retake_photo" && available[key.render_category]
     ? { finding_id: key.id, render_category: key.render_category } : null;
 
-  const row = (area: FindingArea) => {
+  const row = (area: FindingArea): AssessmentResult["rows"][FindingArea] => {
     const fs = sorted.filter((f) => f.area === area);
-    if (fs.length === 0) return { status: "no_issue" as const, summary: area === "shoes_venue" && !shoesAssessable ? "Shoes weren't checked — they aren't fully visible." : "Nothing in your confirmed requirements applies here." };
+    // Never "No clear issue" for something that wasn't visible.
+    if (area === "shoes_venue" && !shoesAssessable && fs.every((f) => f.status !== "conflict" && f.status !== "consider_change")) {
+      return { status: "not_checked", summary: "Your shoes aren't visible in this photo, so they weren't checked." };
+    }
+    if (area === "clothing" && !ctx.garmentsVisible) return { status: "not_checked", summary: "Your clothes weren't visible enough to check." };
+    if (fs.length === 0) return { status: "not_required", summary: "None of your confirmed requirements is about this." };
     const top = fs[0];
     const s = top.status === "conflict" ? "conflict" : top.status === "consider_change" ? "needs_look" : top.status === "cant_assess" ? "cant_assess" : "no_issue";
-    return { status: s as "no_issue" | "needs_look" | "conflict" | "cant_assess", summary: `${top.observation} ${top.reason}` };
+    return { status: s, summary: `${top.observation} ${top.reason}` };
   };
 
   const headline =
-    status === "compatible" ? (checkedSomething ? "Looks compatible with the stated requirements" : "No specific requirements to check against")
-      : status === "consider_change" ? "One change worth considering"
-        : status === "conflict" ? "Potential dress-code conflict"
-          : "Not enough information";
+    status === "compatible" ? "Looks compatible with the stated requirements"
+      : status === "no_requirements" ? "No specific requirements to check"
+        : status === "consider_change" ? "One change worth considering"
+          : status === "conflict" ? "Potential dress-code conflict"
+            : anyChecked || clarification ? "Not enough information" : "We couldn't check your requirements from this photo";
 
   return {
     status,
@@ -338,6 +423,33 @@ function finalize(findings: Finding[], clarification: Clarification | null, shoe
     rows: { clothing: row("clothing"), colour: row("colour"), shoes_venue: row("shoes_venue") },
     clarification,
     shoes_assessable: shoesAssessable,
-    primary_action: status === "insufficient" && clarification ? null : action,
+    // No preview while the photo or an answer is missing: ask for those first.
+    primary_action: status === "no_requirements" || status === "insufficient" ? null : action,
+    checks: ctx.checks,
+    photo_request: ctx.photoRequest,
+    photo_supports: ctx.supports,
+    observed: ctx.observed,
   };
+}
+
+export type RecheckState = "appears_resolved" | "still_conflicts" | "unclear";
+
+export const RECHECK_LABEL: Record<RecheckState | "none", string> = {
+  appears_resolved: "AI re-read of the preview: the requirement appears to be met",
+  still_conflicts: "AI re-read of the preview: still unresolved",
+  unclear: "AI re-read of the preview: couldn't tell — treat as unresolved",
+  none: "Not re-checked — treat as unresolved until you've checked the preview",
+};
+
+/**
+ * Compares the finding a preview was made for with an assessment of the *generated image*.
+ * Only the same requirement counts: a successful render is never treated as a resolved rule.
+ */
+export function recheckOutcome(original: Pick<Finding, "rule_id" | "area" | "render_category">, after: AssessmentResult): { state: RecheckState; note: string } {
+  const same = after.findings.filter((f) => (original.rule_id ? f.rule_id === original.rule_id : f.area === original.area && f.rule_id === null));
+  const bad = same.find((f) => f.status === "conflict" || f.status === "consider_change");
+  if (bad) return { state: "still_conflicts", note: bad.observation };
+  if (same.length && same.every((f) => f.status === "ok")) return { state: "appears_resolved", note: same[0].observation };
+  if (!original.rule_id && same.length === 0 && after.status !== "insufficient") return { state: "appears_resolved", note: "No practical concern was found in the preview." };
+  return { state: "unclear", note: same.find((f) => f.status === "cant_assess")?.observation ?? "The preview couldn't be read clearly enough to tell." };
 }
