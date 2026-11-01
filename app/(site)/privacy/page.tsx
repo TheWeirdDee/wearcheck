@@ -87,6 +87,7 @@ export default function PrivacyPage() {
 
           <Section id="deletion" title="Deletion">
             <p>Deleting a check first blocks access to it, then removes its stored images from WearCheck&rsquo;s bucket and deletes its database records. The usage ledger keeps its counts but loses the link to the check.</p>
+            <p>In our tests the bucket listing showed the files gone immediately, while the storage provider could still return a cached copy to WearCheck&rsquo;s own server for about a minute. No page or link can reach those copies, because access is revoked before the files are removed.</p>
             <p><strong>We can&rsquo;t delete copies held by Google or YouCam.</strong> Their own retention terms apply, and we don&rsquo;t claim otherwise. Anything you downloaded yourself, such as the decision card, is yours to delete.</p>
           </Section>
 
