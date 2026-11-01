@@ -9,6 +9,8 @@ test.describe("public pages", () => {
       const errors: string[] = [];
       page.on("console", (m) => m.type() === "error" && errors.push(m.text()));
       page.on("pageerror", (e) => errors.push(e.message));
+      // Scan the settled, static state: mid-fade reveals would otherwise be measured at partial opacity.
+      await page.emulateMedia({ reducedMotion: "reduce" });
       const res = await page.goto(path);
       expect(res?.status()).toBe(200);
       await page.waitForLoadState("networkidle");
@@ -23,15 +25,29 @@ test.describe("public pages", () => {
     });
   }
 
-  test("landing explains who, what, why, when and how above the fold", async ({ page }) => {
+  test("hero states the promise, both actions, and labels its imagery honestly", async ({ page }) => {
     await page.goto("/");
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Not sure if your outfit fits the dress code?");
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(/An outfit you own\.\s*An occasion to get\s*right\./);
     await expect(page.getByRole("button", { name: "Check my outfit" }).first()).toBeVisible();
-    await expect(page.getByRole("link", { name: /See an example/ })).toBeVisible();
-    await expect(page.getByText(/Illustration of how a check works|Recorded example/)).toBeVisible();
+    await expect(page.getByRole("link", { name: "See how it works" })).toBeVisible();
+    await expect(page.getByText(/this photo was not assessed/)).toBeVisible();
+    // No claims of live execution or verified results on the landing page.
+    await expect(page.getByText(/executed live|working examples|verified result/i)).toHaveCount(0);
+  });
+
+  test("FAQ rows are buttons that expand and collapse", async ({ page }) => {
+    await page.goto("/");
+    const q = page.getByRole("button", { name: "Will it always tell me to change something?" });
+    await expect(q).toHaveAttribute("aria-expanded", "false");
+    await q.click();
+    await expect(q).toHaveAttribute("aria-expanded", "true");
+    await expect(page.getByRole("region", { name: "Will it always tell me to change something?" })).toContainText("complete result");
+    await q.press("Enter");
+    await expect(q).toHaveAttribute("aria-expanded", "false");
   });
 
   test("theme toggle cycles and persists without flash", async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
     await page.goto("/");
     const html = page.locator("html");
     const toggle = page.getByRole("button", { name: /theme/i });
@@ -66,5 +82,48 @@ test.describe("public pages", () => {
     const robots = await (await request.get("/robots.txt")).text();
     expect(robots).toMatch(/Disallow: \/check\//);
     expect(robots).toMatch(/Disallow: \/api\//);
+  });
+});
+
+test.describe("how-it-works story", () => {
+  test("desktop with motion: section pins and vertical scroll moves the panels sideways, in both directions", async ({ page, isMobile }) => {
+    test.skip(isMobile, "desktop only");
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    await page.goto("/");
+    await page.waitForLoadState("networkidle");
+    const track = page.getByRole("list", { name: "Steps" });
+    const x = () => track.evaluate((el) => new DOMMatrix(getComputedStyle(el).transform).m41);
+    const top = await page.locator("#how-it-works").evaluate((el) => el.getBoundingClientRect().top + window.scrollY);
+    await page.evaluate((y) => window.scrollTo(0, y), top);
+    await page.waitForTimeout(400);
+    const start = await x();
+    await page.mouse.wheel(0, 1400);
+    await page.waitForTimeout(1200);
+    const mid = await x();
+    expect(mid).toBeLessThan(start - 200);
+    await expect(page.getByText(/^0[2-4]$/).first()).toBeVisible();
+    await page.mouse.wheel(0, -1400);
+    await page.waitForTimeout(1200);
+    expect(await x()).toBeGreaterThan(mid + 200);
+    // Never page-wide sideways overflow, and resizing recalculates without breaking layout.
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+    await page.setViewportSize({ width: 1100, height: 800 });
+    await page.waitForTimeout(600);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+  });
+
+  test("reduced motion: no pinning, a swipeable row with working controls", async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.goto("/");
+    await page.waitForLoadState("networkidle");
+    const track = page.getByRole("list", { name: "Steps" });
+    expect(await track.evaluate((el) => getComputedStyle(el).overflowX)).toBe("auto");
+    expect(await track.evaluate((el) => getComputedStyle(el).transform)).toBe("none");
+    await page.getByRole("button", { name: "Next step" }).click();
+    await expect.poll(() => track.evaluate((el) => el.scrollLeft)).toBeGreaterThan(100);
+    await expect(page.getByRole("button", { name: "Previous step" })).toBeEnabled();
+    // Every step's text is in the DOM and readable without animation.
+    for (const t of ["The occasion", "Your outfit", "The finding", "The decision"]) await expect(page.getByRole("listitem", { name: new RegExp(t) })).toHaveCount(1);
   });
 });
