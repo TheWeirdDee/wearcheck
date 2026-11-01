@@ -3,8 +3,9 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { PreviewRunner } from "@/components/workflow/preview-runner";
 import { catalogueItem } from "@/lib/catalogue";
-import { currentAssessment, isUuid, photoAsset, requireOwnedCheck } from "@/lib/checks";
+import { currentAssessment, currentRequirements, isUuid, photoAsset, requireOwnedCheck } from "@/lib/checks";
 import { db } from "@/lib/db";
+import { unresolvedNote } from "@/lib/decision";
 import { jobsForCheck, publicJob, type JobRow } from "@/lib/jobs";
 
 export const metadata: Metadata = { title: "Preview" };
@@ -28,6 +29,7 @@ export default async function PreviewPage({ params, searchParams }: { params: Pr
   const [src] = await db()`select id from wearcheck.media_assets where id = ${job.source_asset_id} and check_id = ${check.id}`;
   const it = job.catalogue_item_id ? catalogueItem(job.catalogue_item_id) : null;
   const finding = assessment?.findings_json.findings.find((f) => f.id === job.finding_id);
+  const reqs = await currentRequirements(check);
   return (
     <PreviewRunner
       key={job.id}
@@ -41,6 +43,7 @@ export default async function PreviewPage({ params, searchParams }: { params: Pr
         credit: it ? `Reference image: ${it.creator}, ${it.licence}. Visual reference — not a live shopping listing.` : "Provided by you.",
         reason: finding ? finding.reason : "An optional alternative you chose to try.",
       }}
+      unresolvedNote={finding && reqs ? unresolvedNote(finding, reqs.json) : null}
     />
   );
 }
