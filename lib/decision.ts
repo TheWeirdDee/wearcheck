@@ -1,8 +1,10 @@
 import "server-only";
 import { catalogueItem, type CatalogueItem } from "./catalogue";
-import { type CheckRow, currentAssessment, currentRequirements, photoAsset } from "./checks";
+import { previewableCategories } from "./catalogue";
+import { type CheckRow, currentAssessment, currentRequirements, latestObservation, photoAsset } from "./checks";
 import { db } from "./db";
 import type { JobRow } from "./jobs";
+import { assess, recheckOutcome, type RecheckState } from "./rules";
 import { type AssessmentResult, type Finding, type Requirements, COLOUR_LABEL } from "./schemas";
 
 export type DecisionData = {
@@ -17,7 +19,38 @@ export type DecisionData = {
   item: CatalogueItem | null;
   userRefAssetId: string | null;
   generatedAt: Date;
+  recheck: { state: RecheckState; note: string } | null;
 };
+
+/** The AI re-reading of a generated preview, if the person asked for one. Null means "not re-checked". */
+export async function previewRecheck(checkId: string, resultAssetId: string | null, finding: Finding | null, req: Requirements) {
+  if (!resultAssetId || !finding) return null;
+  const obs = await latestObservation(checkId, resultAssetId);
+  if (!obs) return null;
+  return recheckOutcome(finding, assess(req, obs.json, {}, previewableCategories()));
+}
+
+export { RECHECK_LABEL } from "./rules";
+
+/** Headline, explanation and recommendation for each outcome, shared by the decision page and the card. */
+export function outcomeText(d: Pick<DecisionData, "decision" | "result" | "keyFinding" | "recheck">) {
+  const r = d.result;
+  if (d.decision === "change") {
+    const kf = d.keyFinding;
+    return {
+      title: d.recheck?.state === "appears_resolved" ? "Make this one change." : "Consider this change — unresolved",
+      lede: d.recheck?.state === "appears_resolved"
+        ? "You chose the previewed change, and an AI re-reading of the preview found the requirement met. Look at it yourself before you commit."
+        : "You chose the previewed change. It hasn't been shown to meet the requirement, so check the preview before you commit.",
+      recommendation: kf ? `${kf.observation} ${kf.reason}` : "Use the previewed change.",
+    };
+  }
+  const notChecked = (r.checks ?? []).filter((c) => c.result === "not_checked").map((c) => `“${c.label}”`);
+  if (r.status === "compatible") return { title: "Keep your outfit.", lede: "The requirements you confirmed were checked and nothing conflicts.", recommendation: "No change needed." };
+  if (r.status === "no_requirements") return { title: "Saved without a check.", lede: "No requirements were given, so WearCheck didn't assess this outfit.", recommendation: "Nothing was checked. Add the event's requirements to get an assessment." };
+  if (r.status === "insufficient") return { title: "Kept — not fully checked.", lede: "Some requirements couldn't be checked from this photo.", recommendation: `You kept this outfit.${notChecked.length ? ` Not checked: ${notChecked.join(", ")}.` : ""}` };
+  return { title: "Keep your outfit.", lede: "You chose to keep what you have. The findings are summarised below.", recommendation: `You chose to keep this outfit.${d.keyFinding ? ` Noted: ${d.keyFinding.observation}` : ""}` };
+}
 
 /** Everything the decision page and card need; only valid for the current assessment. */
 export async function loadDecision(check: CheckRow): Promise<DecisionData | null> {
@@ -32,6 +65,7 @@ export async function loadDecision(check: CheckRow): Promise<DecisionData | null
   const result = assessment.findings_json;
   const keyFinding = (job?.finding_id ? result.findings.find((f) => f.id === job!.finding_id) : null) ?? result.findings.find((f) => f.id === result.key_finding_id) ?? null;
   const [card] = await db()`select created_at from wearcheck.decision_cards where check_id = ${check.id} order by created_at desc limit 1`;
+  const recheck = job ? await previewRecheck(check.id, job.result_asset_id, keyFinding, reqs.json) : null;
   return {
     check,
     requirements: reqs.json,
@@ -44,6 +78,7 @@ export async function loadDecision(check: CheckRow): Promise<DecisionData | null
     item: job?.catalogue_item_id ? catalogueItem(job.catalogue_item_id) : null,
     userRefAssetId: job?.user_ref_asset_id ?? null,
     generatedAt: (card?.created_at as Date) ?? new Date(),
+    recheck,
   };
 }
 
