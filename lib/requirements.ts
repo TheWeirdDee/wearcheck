@@ -138,6 +138,10 @@ export function fromExtraction(x: InvitationExtraction): Requirements {
       footwear_prefer = footwear_prefer.filter((s) => !footwear_avoid.includes(s));
       if (!footwear_avoid.length && !footwear_prefer.length) type = "other"; // unknown style: ask, don't pass it
     }
+    // Same for colours: "Please avoid white" is an exclusion whatever the model labelled it.
+    if ((type === "colour_exclusion" || type === "colour_request") && colours.length) {
+      type = NEGATION.test(norm(grounded ? r.evidence_text : r.summary)) ? "colour_exclusion" : "colour_request";
+    }
     if (grounded) {
       rules.push({
         id: ruleId("i"), type, summary: r.summary, severity: strong ? "hard" : "advisory", source: "invitation",
@@ -153,7 +157,9 @@ export function fromExtraction(x: InvitationExtraction): Requirements {
     }
   }
   for (const s of x.suggestions) {
-    rules.push({ id: ruleId("s"), type: s.type, summary: s.summary, severity: "advisory", source: "suggested", evidence_text: null, colours: [], footwear_avoid: [], footwear_prefer: [] });
+    const foot = s.type === "footwear_preference" || s.type === "footwear_requirement" ? parseFootwear(s.summary) : null;
+    const type = foot ? "footwear_preference" : s.type === "footwear_preference" || s.type === "footwear_requirement" ? "other" : s.type;
+    rules.push({ id: ruleId("s"), type, summary: s.summary, severity: "advisory", source: "suggested", evidence_text: null, colours: [], footwear_avoid: foot?.avoid ?? [], footwear_prefer: foot?.prefer ?? [] });
   }
   const dressGrounded = isGrounded(x.dress_code_text, x.full_text);
   const venueGrounded = isGrounded(x.venue_evidence_text, x.full_text);
