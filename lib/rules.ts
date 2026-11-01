@@ -20,6 +20,7 @@ import {
  */
 
 const MAIN_GARMENT_ORDER = ["dress", "jumpsuit", "suit", "top", "outerwear", "bottom"] as const;
+const CLOTHING = new Set<string>(MAIN_GARMENT_ORDER);
 const NARROW_HEELS: FootwearStyle[] = ["stiletto_heel", "kitten_heel", "heeled_sandal"];
 const SOFT_GROUND = new Set(["grass", "sand", "gravel", "cobblestone"]);
 const PALE: ColourFamily[] = ["white", "ivory_cream", "beige", "silver", "gold"];
@@ -57,10 +58,25 @@ export function assess(
     return finalize(findings, null, false, available);
   }
   const lowConfidenceImage = obs.image_quality === "poor";
+  const items = obs.items;
+  const garments = items
+    .map((item, index) => ({ item, index }))
+    .filter((g) => CLOTHING.has(g.item.category))
+    .sort((a, b) => MAIN_GARMENT_ORDER.indexOf(a.item.category as never) - MAIN_GARMENT_ORDER.indexOf(b.item.category as never));
+
+  // A positive verdict needs a usable view of the clothes: no garments or a poor photo is "not enough information".
+  if (lowConfidenceImage || garments.length === 0) {
+    findings.push({
+      id: id(), rule_id: null, area: "clothing", kind: "visibility", status: "cant_assess",
+      observation: garments.length === 0 ? "We couldn't make out your clothes in this photo." : "This photo is too unclear to check your outfit reliably.",
+      reason: "WearCheck only gives a verdict on clothing it can see. Try a brighter, full-length photo, or correct the details yourself.",
+      evidence_text: null, evidence_source: "photo_model", uncertainty: "Outfit not clearly visible.",
+      user_action: "retake_photo", render_category: null, rank: 2,
+    });
+  }
 
   // ---------- main garment & colour ----------
-  const items = obs.items;
-  const main = MAIN_GARMENT_ORDER.map((c) => items.find((i) => i.category === c)).find(Boolean) ?? null;
+  const main = garments[0]?.item ?? null;
   const userColour = corr.main_garment_colour;
   const mainColour: ColourFamily | null = userColour ?? main?.colour_family ?? null;
   const colourConfirmed = Boolean(userColour);
@@ -68,53 +84,72 @@ export function assess(
   const colourClear = colourConfirmed || (main?.colour_certainty === "clear" && main?.visibility === "clear" && colourLighting);
   const mainCategory = main ? garmentRenderCategory(main.category) : null;
 
-  // ---------- 1/2. explicit colour rules (hard first) ----------
+  // ---------- 1/2. explicit colour rules (hard first): every visible garment, not only the main one ----------
+  const colourOf = (g: (typeof garments)[number]) => {
+    const corrected = corr.garment_colours?.[`item${g.index}`] ?? (g.item === main ? userColour : undefined);
+    const colour = corrected ?? g.item.colour_family;
+    const clear = Boolean(corrected) || (g.item.colour_certainty === "clear" && g.item.visibility === "clear" && colourLighting);
+    return { colour, confirmed: Boolean(corrected), clear };
+  };
+  const garmentName = (g: (typeof garments)[number]) => (g.item.category === "bottom" ? "trousers or skirt" : g.item.category);
   const colourRules = req.rules.filter((r) => r.type === "colour_exclusion" && r.colours.length);
   for (const r of colourRules) {
-    if (!main || !mainColour) {
+    const quote = r.evidence_text ?? r.summary;
+    if (garments.length === 0) {
       findings.push({
         id: id(), rule_id: r.id, area: "colour", kind: "visibility", status: "cant_assess",
-        observation: "We couldn't identify your main garment clearly.", reason: `The event asks: “${r.evidence_text ?? r.summary}”.`,
-        evidence_text: r.evidence_text, evidence_source: sourceLabel(r), uncertainty: "Main garment not clearly visible.",
+        observation: "We couldn't identify your clothes clearly.", reason: `The event asks: “${quote}”.`,
+        evidence_text: r.evidence_text, evidence_source: sourceLabel(r), uncertainty: "Clothing not clearly visible.",
         user_action: "retake_photo", render_category: null, rank: 1,
       });
       continue;
     }
-    const excluded = r.colours.includes(mainColour);
-    const nearExcluded = !excluded && PALE.includes(mainColour) && r.colours.some((c) => PALE.includes(c));
-    if ((excluded || nearExcluded) && !colourClear) {
+    const seen = garments.map((g) => ({ g, ...colourOf(g) }));
+    const hits = seen.filter((x) => r.colours.includes(x.colour));
+    const near = seen.filter((x) => !r.colours.includes(x.colour) && PALE.includes(x.colour) && r.colours.some((c) => PALE.includes(c)));
+    const clearHits = hits.filter((x) => x.clear);
+    const unsure = [...hits, ...near].filter((x) => !x.clear);
+
+    if (clearHits.length) {
+      const hard = r.severity === "hard" && r.source !== "suggested";
+      // Prefer a garment a preview can actually replace.
+      const target = clearHits.find((x) => garmentRenderCategory(x.g.item.category)) ?? clearHits[0];
+      const cat = garmentRenderCategory(target.g.item.category);
+      const named = clearHits.map((x) => `a ${COLOUR_LABEL[x.colour]} ${garmentName(x.g)}`);
+      const rest = clearHits.length > 1 ? ` A preview changes one garment at a time, so the other ${clearHits.length === 2 ? "one" : "ones"} would stay.` : "";
+      findings.push({
+        id: id(), rule_id: r.id, area: "colour", kind: hard ? "explicit_rule" : "explicit_preference",
+        status: hard ? "conflict" : "consider_change",
+        observation: `${target.confirmed ? "You confirmed" : "Your photo shows"} ${named.join(" and ")}.${rest}`,
+        reason: `${r.source === "invitation" ? "The invitation says" : "You noted"}: “${quote}”. This covers all visible clothing, not only the main piece.`,
+        evidence_text: r.evidence_text, evidence_source: target.confirmed ? "user_correction" : sourceLabel(r), uncertainty: null,
+        user_action: cat && available[cat] ? "preview_garment" : "none", render_category: cat, rank: hard ? 10 : 30,
+      });
+    } else if (unsure.length) {
       // Respect uncertainty: ask before any confident verdict.
+      const x = unsure[0];
       if (!clarification) {
-        const opts = Array.from(new Set<ColourFamily>([...r.colours, mainColour, "beige", "grey", "other"]));
+        const opts = Array.from(new Set<ColourFamily>([...r.colours, x.colour, "beige", "grey", "other"]));
         clarification = {
-          id: "main_garment_colour",
-          question: `Is your ${main.category} ${opts.filter((c) => c !== "other").slice(0, 3).map((c) => COLOUR_LABEL[c]).join(", ")} or another shade?`,
+          id: `colour:item${x.g.index}`,
+          question: `Is your ${garmentName(x.g)} ${opts.filter((c) => c !== "other").slice(0, 3).map((c) => COLOUR_LABEL[c]).join(", ")} or another shade?`,
           options: opts.map((c) => ({ value: c, label: c === "other" ? "Another colour" : COLOUR_LABEL[c] })),
         };
       }
       findings.push({
         id: id(), rule_id: r.id, area: "colour", kind: "explicit_rule", status: "cant_assess",
-        observation: `Your ${main.category} looks pale, but photos can shift colour${colourLighting ? "" : " — especially in this lighting"}.`,
-        reason: `The event asks: “${r.evidence_text ?? r.summary}”. We need you to confirm the colour before saying anything definite.`,
+        observation: `Your ${garmentName(x.g)} looks pale, but photos can shift colour${colourLighting ? "" : " — especially in this lighting"}.`,
+        reason: `The event asks: “${quote}”. We need you to confirm the colour before saying anything definite.`,
         evidence_text: r.evidence_text, evidence_source: sourceLabel(r), uncertainty: "Garment colour from a photo is uncertain.",
         user_action: "none", render_category: null, rank: 1,
-      });
-    } else if (excluded) {
-      const hard = r.severity === "hard" && r.source !== "suggested";
-      findings.push({
-        id: id(), rule_id: r.id, area: "colour", kind: hard ? "explicit_rule" : "explicit_preference",
-        status: hard ? "conflict" : "consider_change",
-        observation: `${colourConfirmed ? "You confirmed" : "Your photo shows"} a ${COLOUR_LABEL[mainColour]} ${main.category}.`,
-        reason: `${r.source === "invitation" ? "The invitation says" : "You noted"}: “${r.evidence_text ?? r.summary}”.`,
-        evidence_text: r.evidence_text, evidence_source: colourConfirmed ? "user_correction" : sourceLabel(r), uncertainty: null,
-        user_action: mainCategory && available[mainCategory] ? "preview_garment" : "none", render_category: mainCategory, rank: hard ? 10 : 30,
       });
     } else {
       findings.push({
         id: id(), rule_id: r.id, area: "colour", kind: "explicit_rule", status: "ok",
-        observation: `Your ${main.category} appears ${COLOUR_LABEL[mainColour]}.`, reason: `That isn't one of the colours to avoid (“${r.evidence_text ?? r.summary}”).`,
-        evidence_text: r.evidence_text, evidence_source: colourConfirmed ? "user_correction" : "photo_model",
-        uncertainty: colourClear ? null : "Colour judged from the photo.", user_action: "none", render_category: null, rank: 90,
+        observation: `None of your visible clothing appears ${r.colours.map((c) => COLOUR_LABEL[c]).join(" or ")} (${seen.map((x) => `${garmentName(x.g)}: ${COLOUR_LABEL[x.colour]}`).join(", ")}).`,
+        reason: `That fits “${quote}”.`,
+        evidence_text: r.evidence_text, evidence_source: seen.some((x) => x.confirmed) ? "user_correction" : "photo_model",
+        uncertainty: seen.every((x) => x.clear) ? null : "Colour judged from the photo.", user_action: "none", render_category: null, rank: 90,
       });
     }
   }
@@ -133,7 +168,9 @@ export function assess(
   const shoesItem = items.find((i) => i.category === "shoes") ?? null;
   const shoesAssessable = obs.feet_visible === "yes" && obs.full_body_visible && Boolean(shoesItem) && !lowConfidenceImage;
   const style: FootwearStyle | null = corr.footwear_style ?? shoesItem?.footwear_style ?? null;
-  const footRules = req.rules.filter((r) => r.type === "footwear_preference" || r.type === "footwear_requirement");
+  // A footwear rule without a recognised style can't be checked mechanically; it's asked about below instead.
+  const isFoot = (r: Rule) => r.type === "footwear_preference" || r.type === "footwear_requirement";
+  const footRules = req.rules.filter((r) => isFoot(r) && (r.footwear_avoid.length > 0 || r.footwear_prefer.length > 0));
   const outdoorsSoft = (req.venue.setting === "outdoor" || req.venue.setting === "mixed") && SOFT_GROUND.has(req.venue.surface);
   const shoeRenderOk = Boolean(available.shoes) && obs.face_visible;
 
@@ -150,7 +187,7 @@ export function assess(
     const avoided = r.footwear_avoid.includes(style);
     const notPreferred = r.footwear_prefer.length > 0 && !r.footwear_prefer.includes(style);
     if (avoided || notPreferred) {
-      const hard = r.type === "footwear_requirement" && r.severity === "hard" && r.source !== "suggested" && (shoesItem?.visibility === "clear" || Boolean(corr.footwear_style));
+      const hard = (r.type === "footwear_requirement" || avoided) && r.severity === "hard" && r.source !== "suggested" && (shoesItem?.visibility === "clear" || Boolean(corr.footwear_style));
       findings.push({
         id: id(), rule_id: r.id, area: "shoes_venue", kind: hard ? "explicit_rule" : "explicit_preference", status: hard ? "conflict" : "consider_change",
         observation: `Your shoes appear to be ${FOOTWEAR_LABEL[style]}.`,
@@ -187,7 +224,8 @@ export function assess(
   }
 
   // ---------- other explicit rules (garment/coverage/free text): model notes, never auto-conflict ----------
-  for (const r of req.rules.filter((r) => ["garment_exclusion", "garment_requirement", "coverage", "other"].includes(r.type))) {
+  const openRules = req.rules.filter((r) => ["garment_exclusion", "garment_requirement", "coverage", "other"].includes(r.type) || (isFoot(r) && !footRules.includes(r)));
+  for (const r of openRules) {
     const answer = corr.rule_answers?.[r.id];
     const check = obs.rule_checks.find((c) => c.rule_id === r.id);
     if (answer === "applies") {
@@ -224,10 +262,12 @@ export function assess(
   }
 
   // ---------- subjective formality: "may not match", never a violation ----------
+  let dressCodeChecked = false;
   if (req.dress_code && !req.dress_code.ambiguous && obs.formality_impression !== "unclear") {
     const code = req.dress_code.value.toLowerCase();
     const wanted = /black tie|white tie/.test(code) ? 3 : /formal|cocktail|evening/.test(code) ? 2 : /smart|business|semi/.test(code) ? 1 : /casual/.test(code) ? 0 : null;
     const seen = { casual: 0, smart_casual: 1, formal: 2, black_tie: 3 }[obs.formality_impression];
+    dressCodeChecked = wanted !== null;
     if (wanted !== null && seen !== undefined && wanted - seen >= 2) {
       findings.push({
         id: id(), rule_id: null, area: "clothing", kind: "style_suggestion", status: "consider_change",
@@ -252,10 +292,12 @@ export function assess(
     clarification = { id: "footwear_style", question: "What kind of shoes are you wearing?", options: (["stiletto_heel", "block_heel", "wedge", "flat", "flat_sandal", "heeled_sandal", "sneaker", "boot", "loafer"] as FootwearStyle[]).map((s) => ({ value: s, label: FOOTWEAR_LABEL[s] })) };
   }
 
-  return finalize(findings, clarification, shoesAssessable, available);
+  // "Nothing to check" is not the same as "checked and compatible".
+  const checkedSomething = req.rules.length > 0 || dressCodeChecked || outdoorsSoft;
+  return finalize(findings, clarification, shoesAssessable, available, checkedSomething);
 }
 
-function finalize(findings: Finding[], clarification: Clarification | null, shoesAssessable: boolean, available: RenderAvailability): AssessmentResult {
+function finalize(findings: Finding[], clarification: Clarification | null, shoesAssessable: boolean, available: RenderAvailability, checkedSomething = true): AssessmentResult {
   const rankKey = (f: Finding) => {
     const statusWeight = f.status === "conflict" ? 0 : f.status === "consider_change" ? 100 : f.status === "cant_assess" ? 200 : 300;
     const feasible = f.render_category && available[f.render_category] && f.user_action !== "none" ? 0 : 5;
@@ -283,7 +325,7 @@ function finalize(findings: Finding[], clarification: Clarification | null, shoe
   };
 
   const headline =
-    status === "compatible" ? "Looks compatible with the stated requirements"
+    status === "compatible" ? (checkedSomething ? "Looks compatible with the stated requirements" : "No specific requirements to check against")
       : status === "consider_change" ? "One change worth considering"
         : status === "conflict" ? "Potential dress-code conflict"
           : "Not enough information";
