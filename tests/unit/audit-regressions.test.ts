@@ -193,3 +193,15 @@ describe("cropped photos and missing requirements (November 2026 review)", () =>
   });
 });
 
+describe("checked lines explain themselves", () => {
+  it("a one-step formality gap says why it isn't flagged", () => {
+    const r = assess(req("", { dress_code: "Formal" }), obs([garment("suit", "brown"), shoes("loafer")], { formality_impression: "smart_casual" }), {}, ALL);
+    expect(r.status).toBe("compatible");
+    expect(r.checks?.[0].note).toMatch(/one step less formal.*two steps or more/);
+  });
+  it("an unnamed shoe style that passes a prohibition is described by the prohibition", () => {
+    const r = assess(req("No trainers"), obs([garment("suit", "brown"), shoes("other")]), {}, ALL);
+    expect(r.checks?.[0].note).toBe("Your shoes don't appear to be trainers / sneakers.");
+  });
+});
+
