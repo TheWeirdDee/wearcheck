@@ -70,3 +70,12 @@ describe("catalogue matching", () => {
     }
   });
 });
+
+describe("render job request", () => {
+  it("accepts optional previews for every category, including the longest id", async () => {
+    const { RenderJobRequest, RenderCategory } = await import("@/lib/schemas");
+    for (const c of RenderCategory.options) {
+      expect(RenderJobRequest.safeParse({ checkId: "6f1c2d3e-4b5a-4c6d-8e7f-0a1b2c3d4e5f", findingId: `voluntary:${c}`, itemId: "x" }).success).toBe(true);
+    }
+  });
+});
