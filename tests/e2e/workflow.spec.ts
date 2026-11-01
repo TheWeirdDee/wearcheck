@@ -141,7 +141,7 @@ test.describe("live assessments @live", () => {
     await expect(page.getByTestId("unsupported-full_body")).toBeVisible();
     // Add a requirement: the same cropped photo is now "not enough information" and asks for a better photo.
     await page.goto(`/check/${id}/requirements`);
-    await page.getByLabel(/Dress code/).first().fill("Formal");
+    await page.getByRole("textbox", { name: "Dress code" }).fill("Formal");
     await page.getByRole("button", { name: "These details are correct" }).click();
     await page.waitForURL(/\/outfit$/);
     await page.goto(`/check/${id}/assessment`);
