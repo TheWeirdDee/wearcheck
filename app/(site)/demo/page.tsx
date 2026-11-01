@@ -81,17 +81,19 @@ export default async function DemoPage() {
       </div>
 
       {SHOWCASE.length ? (
-        <section aria-labelledby="recorded" className="border-t border-line bg-raised">
+        <section id="recorded" aria-labelledby="recorded-h" className="scroll-mt-24 border-t border-line bg-raised">
           <div className="wrap py-16">
             <p className="eyebrow">Recorded results</p>
-            <h2 id="recorded" className="t-2 mt-4">Saved outputs from earlier real runs</h2>
-            <p className="mt-3 max-w-2xl text-ink-2">These are recordings of real YouCam tasks, shown with the subject&rsquo;s permission. They are not the result of a fresh call.</p>
+            <h2 id="recorded-h" className="t-2 mt-4">Saved outputs from earlier real runs</h2>
+            <p className="mt-3 max-w-2xl text-ink-2">Recordings of real YouCam tasks generated through WearCheck on the live site. They are not the result of a fresh call.</p>
+            <p className="photo-credit mt-3 max-w-2xl">{SHOWCASE[0].permission}</p>
             <div className="mt-10 grid gap-12 md:grid-cols-2">
               {SHOWCASE.map((s) => (
                 <figure key={s.previewSrc}>
                   <Compare originalUrl={s.originalSrc} previewUrl={s.previewSrc} previewAlt={`AI-generated preview: ${s.change}`} />
-                  <figcaption className="mt-2 text-sm text-ink-2">
-                    Recorded {s.recordedAt.slice(0, 10)} · {s.requirement} → {s.change}
+                  <figcaption className="mt-3 text-[0.95rem] text-ink-2">
+                    <span className="font-semibold text-ink">{s.feature === "Shoes V3" ? "Shoe preview" : "Garment preview"}</span> · {s.requirement}: {s.change}. Recorded {s.recordedAt.slice(0, 10)}, {s.latencySeconds} s.
+                    {s.note ? <span className="mt-1 block text-muted">{s.note}</span> : null}
                   </figcaption>
                 </figure>
               ))}
