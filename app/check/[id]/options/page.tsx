@@ -2,75 +2,108 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { OptionsView, type OptionItem } from "@/components/workflow/options-view";
-import { optionsFor, voluntaryOptions, type CatalogueItem } from "@/lib/catalogue";
+import { CATEGORY_META } from "@/lib/categories";
+import { catalogueCount, rankOptions } from "@/lib/catalogue";
 import { currentAssessment, currentRequirements, photoAsset, requireOwnedCheck } from "@/lib/checks";
-import type { RenderCategory } from "@/lib/schemas";
+import { RenderCategory, type AssessmentResult, type PhotoSupport } from "@/lib/schemas";
 
 export const metadata: Metadata = { title: "Choose a change" };
 
-const toItem = (c: CatalogueItem): OptionItem => ({
-  id: c.id, title: c.title, category: c.category, file: c.file, tags: c.tags, creator: c.creator,
-  licence: c.licence, licence_url: c.licence_url, source_name: c.source_name, source_url: c.source_url,
-});
+const ORDER: RenderCategory[] = ["upper_body", "outer", "full_body", "shoes"];
 
-const HEADINGS: Record<RenderCategory, string> = {
-  shoes: "Let's fix the shoes — not the whole outfit",
-  full_body: "Let's try one different dress — and keep your shoes",
-  upper_body: "Let's change the top — not the whole outfit",
-  outer: "Let's add a different outer layer",
-};
+/** Older stored assessments have no photo_supports; derive the conservative equivalent. */
+function supportsOf(res: AssessmentResult): PhotoSupport {
+  if (res.photo_supports) return res.photo_supports;
+  const ok = { ok: true, reason: "" };
+  return { upper_body: ok, outer: ok, full_body: ok, shoes: res.shoes_assessable ? ok : { ok: false, reason: "Your feet aren't fully in frame." } };
+}
 
 export default async function OptionsPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ explore?: string; finding?: string; category?: string }> }) {
   const check = await requireOwnedCheck((await params).id);
   const sp = await searchParams;
-  const explore = sp.explore === "1";
   const [reqs, assessment, photo] = await Promise.all([currentRequirements(check), currentAssessment(check), photoAsset(check)]);
   if (!reqs || !photo) redirect(`/check/${check.id}/requirements`);
   if (!assessment) redirect(`/check/${check.id}/assessment`);
   const res = assessment.findings_json;
-  // A specific actionable finding (from "Also worth a look"), else the assessment's primary action.
-  const chosen = sp.finding ? res.findings.find((f) => f.id === sp.finding && f.render_category && (f.user_action === "preview_shoes" || f.user_action === "preview_garment") && (f.status === "conflict" || f.status === "consider_change")) : null;
-  const key = (res.status !== "insufficient" ? chosen : null) ?? res.findings.find((f) => f.id === res.primary_action?.finding_id) ?? null;
+  const supports = supportsOf(res);
+  const asked = RenderCategory.safeParse(sp.category);
+  const photoUrl = `/api/media/${photo.id}`;
 
-  if (!explore && !key) {
+  // A finding the person chose ("Also worth a look"), else the assessment's primary action.
+  const actionable = (id: string | undefined) => res.findings.find((f) => f.id === id && f.render_category && (f.user_action === "preview_shoes" || f.user_action === "preview_garment") && (f.status === "conflict" || f.status === "consider_change"));
+  const key = res.status === "insufficient" || res.status === "no_requirements" ? null : actionable(sp.finding) ?? (sp.explore === "1" ? undefined : actionable(res.primary_action?.finding_id));
+
+  if (!key && sp.explore !== "1") {
     return (
       <div className="max-w-2xl">
         <h1 className="t-2">No change to preview</h1>
-        <p className="mt-3 text-ink-2">{res.clarification ? "Please answer the open question on your assessment first." : "Your assessment didn't identify a change we can preview from this photo."}</p>
-        <Link href={`/check/${check.id}/assessment`} className="btn btn-primary mt-6">Back to assessment</Link>
+        <p className="mt-3 text-ink-2">{res.clarification ? "Please answer the open question on your assessment first." : res.photo_request ? `Your photo needs to change first: ${res.photo_request}` : "Your assessment didn't identify a change we can preview from this photo."}</p>
+        <div className="mt-6 flex flex-wrap gap-3">
+          <Link href={`/check/${check.id}/assessment`} className="btn btn-primary">Back to assessment</Link>
+          <Link href={`/check/${check.id}/options?explore=1`} className="btn btn-quiet">Explore a change anyway</Link>
+        </div>
       </div>
     );
   }
 
-  if (explore || !key) {
-    // Optional alternatives for a compatible outfit: any supported category, filtered by the user's rules.
-    const only = (["full_body", "upper_body", "outer", "shoes"] as RenderCategory[]).find((c) => c === sp.category);
-    const allowed = (only ? [only] : (["full_body", "upper_body", "outer", "shoes"] as RenderCategory[])).filter((c) => c !== "shoes" || res.shoes_assessable);
-    const items = only ? optionsFor({ rule_id: null, render_category: only }, reqs.json) : voluntaryOptions(reqs.json, allowed);
-    const reason = res.status === "compatible"
-      ? "Your outfit already looks compatible. This is entirely optional — keeping what you have is a complete result."
-      : `Your ${only === "shoes" ? "shoes already fit" : "outfit already fits"} the confirmed requirements here, so this preview is optional — only items that keep fitting them are shown.`;
+  // Which category: the finding's (or a compatible garment alternative to it), or the one the person picked.
+  const garment = (c: RenderCategory) => c !== "shoes";
+  let category: RenderCategory | null = null;
+  if (key) category = asked.success && (asked.data === key.render_category || (garment(asked.data) && garment(key.render_category!))) ? asked.data : key.render_category!;
+  else if (asked.success) category = asked.data;
+
+  if (!category) {
+    // Step 1 of exploring: what to change. Only what this photo (and the try-on provider) supports.
     return (
-      <OptionsView
-        checkId={check.id} findingId="voluntary" explore heading={only === "shoes" ? "Optional: try different shoes" : "Optional: try an alternative"}
-        reason={reason}
-        photoUrl={`/api/media/${photo.id}`} items={items.map(toItem)} allowedCategories={allowed} shoesAssessable={res.shoes_assessable}
-      />
+      <div>
+        <p className="eyebrow plain">Step 3 · Optional change</p>
+        <h1 className="t-2 mt-3">What would you like to change?</h1>
+        <p className="lede mt-4 max-w-[52ch]">{res.status === "compatible" ? "Nothing needs changing — keeping your outfit is a complete result. If you'd like to see an alternative anyway, choose one part to change." : "Choose one part of the outfit. WearCheck previews one change at a time."}</p>
+        <ul className="mt-10 grid grid-cols-[repeat(auto-fill,minmax(min(100%,16rem),1fr))] gap-4">
+          {ORDER.map((c) => {
+            const meta = CATEGORY_META[c];
+            const s = supports[c];
+            const n = catalogueCount(c);
+            return (
+              <li key={c} className={`flex flex-col border p-5 ${s.ok ? "border-line-strong bg-raised" : "border-line bg-bg text-muted"}`}>
+                <h2 className="font-display text-xl font-semibold">{meta.label}</h2>
+                <p className="mt-2 text-[0.95rem]">{meta.replaces}</p>
+                <p className="mt-2 text-[0.875rem] text-muted">Generated by YouCam {meta.provider} · {n ? `${n} reference ${n === 1 ? "item" : "items"}, or your own` : "upload your own item"}</p>
+                {s.ok ? (
+                  <Link href={`/check/${check.id}/options?explore=1&category=${c}`} className="btn btn-secondary btn-sm mt-5 self-start">Change the {meta.noun}</Link>
+                ) : (
+                  <p className="mt-auto pt-4 text-[0.9rem] font-medium" data-testid={`unsupported-${c}`}>Not available for this photo: {s.reason}</p>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+        <p className="mt-6 text-[0.9rem] text-muted">Trousers and skirts aren&rsquo;t offered: the try-on needs a photo of them being worn, which WearCheck can&rsquo;t verify.</p>
+        <Link href={`/check/${check.id}/assessment`} className="btn btn-quiet mt-4">Back to assessment</Link>
+      </div>
     );
   }
 
-  const cat = key.render_category!;
+  if (!supports[category].ok) redirect(`/check/${check.id}/options?explore=1`);
+  const ranked = rankOptions({ render_category: category, rule_id: key?.rule_id ?? null }, reqs.json, res.observed);
+  const items: OptionItem[] = ranked.map(({ item: c, reasons }) => ({
+    id: c.id, title: c.title, category: c.category, file: c.file, tags: c.tags, creator: c.creator,
+    licence: c.licence, licence_url: c.licence_url, source_name: c.source_name, source_url: c.source_url, reasons,
+  }));
+  const why = key ? `${key.observation} ${key.reason}` : res.status === "compatible"
+    ? "Optional: your outfit already looks compatible. Keeping what you have is a complete result."
+    : "Optional: you chose to explore this change.";
+
   return (
     <OptionsView
       checkId={check.id}
-      findingId={key.id}
-      explore={false}
-      heading={HEADINGS[cat]}
-      reason={key.reason}
-      photoUrl={`/api/media/${photo.id}`}
-      items={optionsFor(key, reqs.json).map(toItem)}
-      allowedCategories={[cat]}
-      shoesAssessable={res.shoes_assessable}
+      findingId={key ? key.id : null}
+      category={category}
+      why={why}
+      photoUrl={photoUrl}
+      items={items}
+      catalogueTotal={catalogueCount(category)}
+      changeCategoryHref={key ? null : `/check/${check.id}/options?explore=1`}
     />
   );
 }
