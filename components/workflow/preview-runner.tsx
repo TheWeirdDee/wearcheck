@@ -7,6 +7,7 @@ import { MotionConfig, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { api, ClientApiError } from "@/lib/client";
 import type { PublicJob } from "@/lib/jobs";
+import { RECHECK_LABEL, type RecheckState } from "@/lib/rules";
 import { CheckIcon, DownloadIcon } from "../icons";
 import { Compare } from "./compare";
 
@@ -17,11 +18,15 @@ type Props = {
   initialJob: PublicJob;
   originalUrl: string;
   item: { title: string; file: string | null; userUrl: string | null; credit: string | null; reason: string };
-  /** What the person should check in the generated image; WearCheck doesn't re-check it. */
+  /** What the person should check in the generated image. */
   unresolvedNote: string | null;
+  /** Set when the preview addresses a requirement, so it can be re-read against it. */
+  recheck: { available: boolean; initial: { state: RecheckState; note: string } | null };
+  /** Other supported operations to offer if the problem remains (e.g. an outer layer instead of a top). */
+  alternatives: { href: string; label: string }[];
 };
 
-export function PreviewRunner({ checkId, initialJob, originalUrl, item, unresolvedNote }: Props) {
+export function PreviewRunner({ checkId, initialJob, originalUrl, item, unresolvedNote, recheck, alternatives }: Props) {
   const router = useRouter();
   const [job, setJob] = useState<PublicJob>(initialJob);
   const initiallyDone = initialJob.status === "completed";
@@ -31,6 +36,21 @@ export function PreviewRunner({ checkId, initialJob, originalUrl, item, unresolv
   const [offline, setOffline] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const result = useRef<HTMLDivElement>(null);
+  const [outcome, setOutcome] = useState(recheck.initial);
+  const [rechecking, setRechecking] = useState(false);
+
+  async function runRecheck() {
+    setRechecking(true);
+    setError(null);
+    try {
+      const r = await api<{ state: RecheckState; note: string }>(`/api/render-jobs/${initialJob.id}/recheck`, { method: "POST" });
+      setOutcome(r);
+    } catch (e) {
+      setError(e instanceof ClientApiError ? e.body.message : "Couldn't re-read the preview.");
+    } finally {
+      setRechecking(false);
+    }
+  }
 
   const jobId = initialJob.id;
   useEffect(() => {
@@ -136,7 +156,24 @@ export function PreviewRunner({ checkId, initialJob, originalUrl, item, unresolv
           <div>
             <h2 className="t-3">{item.title}</h2>
             <p className="mt-2 text-ink-2">{item.reason}</p>
-            {unresolvedNote ? <p className="mt-4 border-l-2 border-warn pl-3 text-[0.95rem]">{unresolvedNote}</p> : null}
+            {recheck.available ? (
+              <section className={`mt-5 border-l-2 p-4 ${outcome?.state === "appears_resolved" ? "border-ok bg-raised" : "border-warn bg-raised"}`} aria-labelledby="h-outcome" data-testid="preview-outcome">
+                <h3 id="h-outcome" className="font-semibold">Has this resolved it?</h3>
+                <p className="mt-1 text-[0.95rem] font-medium" role="status">{RECHECK_LABEL[outcome?.state ?? "none"]}</p>
+                {outcome ? <p className="mt-1 text-[0.95rem] text-ink-2">{outcome.note}</p> : unresolvedNote ? <p className="mt-1 text-[0.95rem] text-ink-2">{unresolvedNote}</p> : null}
+                {!outcome ? (
+                  <button type="button" className="btn btn-secondary btn-sm mt-3" onClick={runRecheck} disabled={rechecking} aria-busy={rechecking}>
+                    {rechecking ? "Re-reading the preview…" : "Check the preview against the rule"}
+                  </button>
+                ) : null}
+                {!outcome ? <p className="mt-2 text-[0.8125rem] text-muted">Google Gemini re-reads the generated image and WearCheck applies the same rule. It&rsquo;s an AI reading, not a guarantee.</p> : null}
+                {outcome && outcome.state !== "appears_resolved" && alternatives.length ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {alternatives.map((a) => <Link key={a.href} href={a.href} className="btn btn-secondary btn-sm">{a.label}</Link>)}
+                  </div>
+                ) : null}
+              </section>
+            ) : unresolvedNote ? <p className="mt-4 border-l-2 border-warn pl-3 text-[0.95rem]">{unresolvedNote}</p> : null}
             {item.credit ? <p className="photo-credit mt-2">{item.credit}</p> : null}
             <div className="mt-8 flex flex-col gap-3 border-t border-line pt-6">
               {!job.stale ? <button type="button" className="btn btn-primary" onClick={() => decide("change")} disabled={busy}>Use this look</button> : null}
