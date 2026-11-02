@@ -1,0 +1,34 @@
+{
+  "dress-black-silk.jpg": {
+    "sha256": "e33be83325bfd2949627c452ab8b8c98876116884216cfb9bee016e7324e85f4",
+    "dhash": "b07171b271b1b1b0"
+  },
+  "flat-black-low-heel.jpg": {
+    "sha256": "75daac97b8cbafc0ca675362ca6fba5b709075fb212a16f5f58ccd672298ce75",
+    "dhash": "a08d72e2c6f071ce"
+  },
+  "loafer-black-tassel.jpg": {
+    "sha256": "ebc75ecf6a14222dbed4e4c222064d17bbbcf425d7bbf57e8edeb4bde30d303f",
+    "dhash": "900892d1b0980082"
+  },
+  "oxford-tan-captoe.jpg": {
+    "sha256": "db6942ccd3996c38674336c8571ec7a13f980df49755644a66da496a76e01a11",
+    "dhash": "88b0828082dc7c00"
+  },
+  "pump-nude-pointed.jpg": {
+    "sha256": "347d691c78d2b8250de1a037b79d15ee06a3775ff864df46570b2ad8c63a5af4",
+    "dhash": "274fe77368793986"
+  },
+  "top-blue-shirt.jpg": {
+    "sha256": "1d8e114b45a346a9554248d2abb7410694d26c80443860573324077aa330b23c",
+    "dhash": "608671f8b271f004"
+  },
+  "top-green-seersucker.jpg": {
+    "sha256": "49ed076a35a6bf3b502bcfa4722b75eb8275a8214c77540ab68c54e61acf758d",
+    "dhash": "8431416561612104"
+  },
+  "wedge-black-sandal.jpg": {
+    "sha256": "5fabea28d0fc1934e14c6ba1391c5d75102ba72f580940e89f772977aff1a7ca",
+    "dhash": "87cb491d5be9c13f"
+  }
+}
