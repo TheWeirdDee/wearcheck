@@ -12,9 +12,10 @@ export default defineConfig({
   expect: { timeout: 20_000 },
   fullyParallel: false,
   workers: 1,
-  reporter: [["list"]],
+  reporter: process.env.E2E_JSON_OUTPUT ? [["list"], ["json", { outputFile: process.env.E2E_JSON_OUTPUT }]] : [["list"]],
   use: {
     baseURL: process.env.E2E_BASE_URL ?? "http://localhost:3000",
+    storageState: process.env.E2E_STORAGE_STATE || undefined,
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
   },
