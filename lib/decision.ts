@@ -19,13 +19,13 @@ export type DecisionData = {
   item: CatalogueItem | null;
   userRefAssetId: string | null;
   generatedAt: Date;
-  recheck: { state: RecheckState; note: string } | null;
+  recheck: { state: RecheckState; note: string; checks?: AssessmentResult["checks"] } | null;
 };
 
 /** The AI re-reading of a generated preview, if the person asked for one. Null means "not re-checked". */
-export async function previewRecheck(checkId: string, resultAssetId: string | null, finding: Finding | null, req: Requirements) {
-  if (!resultAssetId || !finding) return null;
-  const obs = await latestObservation(checkId, resultAssetId);
+export async function previewRecheck(checkId: string, resultAssetId: string | null, finding: Finding | null, req: Requirements, revision?: number) {
+  if (!resultAssetId) return null;
+  const obs = await latestObservation(checkId, resultAssetId, revision);
   if (!obs) return null;
   return recheckOutcome(finding, assess(req, obs.json, {}, previewableCategories()));
 }
@@ -40,7 +40,7 @@ export function outcomeText(d: Pick<DecisionData, "decision" | "result" | "keyFi
     return {
       title: d.recheck?.state === "appears_resolved" ? "Make this one change." : "Consider this change — unresolved",
       lede: d.recheck?.state === "appears_resolved"
-        ? "You chose the previewed change, and an AI re-reading of the preview found the requirement met. Look at it yourself before you commit."
+        ? "You chose the previewed change. An AI re-reading checked all confirmed requirements and found no remaining issue. Inspect the whole outfit yourself before you commit."
         : "You chose the previewed change. It hasn't been shown to meet the requirement, so check the preview before you commit.",
       recommendation: kf ? `${kf.observation} ${kf.reason}` : "Use the previewed change.",
     };
@@ -65,12 +65,14 @@ export async function loadDecision(check: CheckRow): Promise<DecisionData | null
   const result = assessment.findings_json;
   const keyFinding = (job ? result.findings.find((f) => f.id === job.finding_id) : result.findings.find((f) => f.id === result.key_finding_id)) ?? null;
   const [card] = await db()`select created_at from wearcheck.decision_cards where check_id = ${check.id} order by created_at desc limit 1`;
-  const recheck = job ? await previewRecheck(check.id, job.result_asset_id, keyFinding, reqs.json) : null;
+  const recheck = job ? await previewRecheck(check.id, job.result_asset_id, keyFinding, reqs.json, reqs.revision) : null;
+  const generatedObservation = job?.result_asset_id ? await latestObservation(check.id, job.result_asset_id, reqs.revision) : null;
+  const chosenResult = generatedObservation ? assess(reqs.json, generatedObservation.json, {}, previewableCategories()) : result;
   return {
     check,
     requirements: reqs.json,
     assessmentId: assessment.id,
-    result,
+    result: chosenResult,
     keyFinding,
     decision: job ? "change" : "keep",
     photoAssetId: photo.id,
