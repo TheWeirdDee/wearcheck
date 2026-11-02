@@ -26,7 +26,7 @@ export function handler<A extends unknown[]>(name: string, fn: (...args: A) => P
     } catch (e) {
       if (e instanceof AppError) {
         if (e.status >= 500) log.warn(name, { code: e.code });
-        return NextResponse.json(envelope(e), { status: e.status, headers: { "Cache-Control": "private, no-store" } });
+        return NextResponse.json(envelope(e), { status: e.status, headers: { "Cache-Control": "private, no-store", ...(e.retryAfter !== null ? { "Retry-After": String(e.retryAfter), "X-RateLimit-Reset": String(Math.ceil(Date.now() / 1000) + e.retryAfter) } : {}) } });
       }
       if (e instanceof ZodError) {
         const err = new AppError("INVALID_INPUT", "Some of the details sent weren't valid.", 400, true, "RETRY");
