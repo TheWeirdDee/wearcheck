@@ -146,7 +146,7 @@ test.describe("live assessments @live", () => {
       expect(good.status()).toBe(200);
       const ref = await good.json();
       await page.goto(`/check/${id}/requirements`);
-      const rule = page.locator("li").filter({ has: page.getByText("No white", { exact: true }) }).last();
+      const rule = page.getByRole("region", { name: "Colour restrictions" }).locator("li").first();
       await rule.getByRole("button", { name: "Edit", exact: true }).click();
       await rule.getByRole("textbox", { name: "Requirement text" }).fill("No blue");
       await rule.getByRole("group", { name: "Colours", exact: true }).getByRole("button", { name: "white", exact: true }).click();
@@ -468,9 +468,9 @@ test.describe("live YouCam renders @live @render", () => {
     await renderJourney(page, browser, context, { restrictions: "Please avoid white or ivory", item: /Blue cotton/i, recheck: true });
   });
 
-  test("shoes (Shoes V3) with a user-uploaded reference: “heels or wedges required” → own photo of a wedge → render → card → delete", async ({ page, browser, context, isMobile }) => {
+  test("shoes (Shoes V3) with a user-uploaded reference: “heels or wedges required” → product photo of court heels → render → card → delete", async ({ page, browser, context, isMobile }) => {
     test.skip(isMobile, "run once, on desktop, to bound credit use (mobile layout is checked inside)");
     // Deterministic for flat shoes, loafers or boots: none is a heel or a wedge.
-    await renderJourney(page, browser, context, { restrictions: "Heels or wedges required", upload: "public/reference/wedge-black-sandal.jpg", recheck: true });
+    await renderJourney(page, browser, context, { restrictions: "Heels or wedges required", upload: "public/reference/pump-nude-pointed.jpg", recheck: true });
   });
 });
