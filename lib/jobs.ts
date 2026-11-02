@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import sharp, { type Metadata } from "sharp";
-import { catalogueItem, optionsFor } from "./catalogue";
+import { catalogueItem, rankOptions } from "./catalogue";
 import { type CheckRow, type AssessmentRow, currentRequirements, saveAsset, trackEvent } from "./checks";
 import { db } from "./db";
 import { env } from "./env";
@@ -11,6 +11,8 @@ import { AppError } from "./errors";
 import { log } from "./log";
 import { getObject } from "./storage";
 import { RenderCategory } from "./schemas";
+import { ReferenceObservation, referenceProblem } from "./reference-validation";
+import { limitInTransaction } from "./rate-limit";
 import { createTask, describeEngineError, downloadResult, getTask, ProviderError, UNITS_PER_TASK, uploadFile, type Feature } from "./youcam/client";
 
 /**
@@ -75,12 +77,18 @@ export async function requestRender(r: RenderRequest): Promise<JobRow> {
     refKey = `cat:${item.id}`;
     // Re-validate on the server: the item must still be an eligible correction under the confirmed requirements.
     const reqs = await currentRequirements(r.check);
-    if (!reqs || !optionsFor({ render_category: item.category, rule_id: findingRuleId }, reqs.json).some((c) => c.id === item.id)) {
+    if (!reqs || !rankOptions({ render_category: item.category, rule_id: findingRuleId }, reqs.json, r.assessment.findings_json.observed).some((c) => c.item.id === item.id)) {
       throw new AppError("ITEM_NOT_ELIGIBLE", "That reference doesn't meet your confirmed requirements. Please choose another item or upload your own.", 400, false, "CHOOSE_ANOTHER_ITEM");
     }
   } else {
-    const rows = await db()`select id from wearcheck.media_assets where id = ${r.reference.assetId} and check_id = ${r.check.id} and kind = 'reference_upload' and origin = ${`user_reference:${r.reference.category}`}`;
+    const rows = await db()`select id, reference_validation from wearcheck.media_assets where id = ${r.reference.assetId} and check_id = ${r.check.id} and kind = 'reference_upload' and origin = ${`user_reference:${r.reference.category}`}`;
     if (!rows[0]) throw new AppError("UNKNOWN_ITEM", "We couldn't find your uploaded item.", 400, false, "CHOOSE_ANOTHER_ITEM");
+    const validation = rows[0].reference_validation as { revision?: number; observation?: unknown } | null;
+    const observed = ReferenceObservation.safeParse(validation?.observation);
+    const reqs = await currentRequirements(r.check);
+    if (!reqs || validation?.revision !== reqs.revision || !observed.success || referenceProblem(observed.data, r.reference.category, reqs.json)) {
+      throw new AppError("REFERENCE_NOT_SUITABLE", "Upload this item again so it can be checked against your current requirements before generating.", 422, true, "REPLACE_FILE");
+    }
     category = r.reference.category;
     refKey = `user:${r.reference.assetId}`;
   }
@@ -108,8 +116,15 @@ export async function requestRender(r: RenderRequest): Promise<JobRow> {
     await tx`select pg_advisory_xact_lock(hashtext('wearcheck:render-admission'))`;
     const [dupe] = await tx`select * from wearcheck.render_jobs where idempotency_key = ${idem}`;
     if (dupe) return dupe as unknown as JobRow; // concurrent duplicate submission
+    const [live] = await tx`select c.id from wearcheck.checks c where c.id = ${r.check.id} and c.guest_session_id = ${r.check.guest_session_id}
+      and c.status <> 'deleted' and c.expires_at > now() and c.photo_asset_id = ${r.assessment.photo_asset_id}
+      and c.requirements_revision = ${r.assessment.requirements_revision}
+      and exists (select 1 from wearcheck.assessments a where a.id = ${r.assessment.id} and a.check_id = c.id and a.superseded_at is null)
+      for update`;
+    if (!live) throw new AppError("STALE_ASSESSMENT", "Your photo or requirements changed. Review the latest assessment before generating.", 409, true, "EDIT_REQUIREMENTS");
     const active = await tx`select id from wearcheck.render_jobs where check_id = ${r.check.id} and status = any(${ACTIVE}) limit 1`;
     if (active[0]) throw new AppError("RENDER_IN_PROGRESS", "A preview for this check is already running.", 409, true, "WAIT");
+    await limitInTransaction(tx, "renderSubmit", r.check.guest_session_id, "preview requests in this session");
 
     // Bounded spend: per guest session and global per-day caps. Jobs still being sent count too.
     const [{ session_count }] = await tx`
@@ -162,9 +177,16 @@ async function submit(job: JobRow, demoCase: string | null): Promise<JobRow> {
   try {
     job = await setJob(job.id, { status: "uploading_source" });
     const [src] = await db()`select storage_key from wearcheck.media_assets where id = ${job.source_asset_id} and check_id = ${job.check_id}`;
-    const srcFileId = await uploadFile(await getObject(src.storage_key as string), `src-${job.id}.jpg`, "image/jpeg");
+    const source = await getObject(src.storage_key as string);
+    const srcFileId = await uploadFile(source, `src-${job.id}.jpg`, "image/jpeg");
     job = await setJob(job.id, { status: "uploading_reference" });
-    const refFileId = await uploadFile(await referenceBytes(job), `ref-${job.id}.jpg`, "image/jpeg");
+    const reference = await referenceBytes(job);
+    const refFileId = await uploadFile(reference, `ref-${job.id}.jpg`, "image/jpeg");
+    const provenance = { sourceAssetId: job.source_asset_id, sourceSha256: createHash("sha256").update(source).digest("hex"),
+      catalogueItemId: job.catalogue_item_id, userAssetId: job.user_ref_asset_id,
+      referenceSha256: createHash("sha256").update(reference).digest("hex"), srcFileId, refFileId,
+      feature: job.feature, category: job.garment_category ?? "shoes" };
+    await db()`update wearcheck.render_jobs set input_provenance = ${db().json(provenance)} where id = ${job.id}`;
     // Durable marker: from here a crash or lost response means YouCam may have accepted the task.
     job = await setJob(job.id, { provider_status: "creating_task", lease_until: new Date(Date.now() + 90_000) });
     creating = true;
