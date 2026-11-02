@@ -46,13 +46,12 @@ describe("alternatives depend on the person's inputs, not a fixed category-first
     expect(top.reasons.join(" ")).toMatch(/Different from your current white top/);
   });
 
-  it("ranks the shoe that fits the rule and the venue first, and says when a pick would look similar", () => {
+  it("excludes the same observed shoe style and colour", () => {
     const r = req("Flats or wedges recommended", { setting: "outdoor" });
     r.venue.surface = "grass";
     const a = assess(r, obs([g("suit", "navy"), shoe("loafer")]), {}, ALL);
     const ranked = rankOptions({ render_category: "shoes", rule_id: null }, r, a.observed);
-    const loafer = ranked.find((x) => x.item.id === "loafer-black-tassel")!;
-    expect(loafer.reasons.join(" ")).toMatch(/similar style/);
+    expect(ranked.find((x) => x.item.id === "loafer-black-tassel")).toBeUndefined();
     expect(ranked[0].item.id).not.toBe("loafer-black-tassel");
   });
 
