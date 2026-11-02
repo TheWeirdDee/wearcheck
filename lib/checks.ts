@@ -5,7 +5,9 @@ import { Errors } from "./errors";
 import { type NormalizedImage } from "./images";
 import { putObject, removeObjects } from "./storage";
 import { currentGuest, GUEST_RETENTION_HOURS } from "./session";
+import { limitInTransaction } from "./rate-limit";
 import type { AssessmentResult, InvitationExtraction, OutfitObservation, Requirements, UserCorrections } from "./schemas";
+import { ASSESSMENT_POLICY_VERSION } from "./schemas";
 
 /**
  * Data access layer. Every function that returns check data first verifies that the
@@ -29,12 +31,32 @@ export type CheckRow = {
   expires_at: Date;
 };
 
-export async function createCheck(guestId: string, demoCase: string | null = null): Promise<CheckRow> {
+export async function createCheck(guestId: string, demoCase: string | null = null, requestId: string | null = null): Promise<CheckRow> {
   const [row] = await db()`
-    insert into wearcheck.checks (guest_session_id, demo_case, expires_at)
-    values (${guestId}, ${demoCase}, now() + make_interval(hours => ${GUEST_RETENTION_HOURS}))
+    insert into wearcheck.checks (guest_session_id, demo_case, expires_at, create_request_id)
+    values (${guestId}, ${demoCase}, now() + make_interval(hours => ${GUEST_RETENTION_HOURS}), ${requestId})
+    on conflict (guest_session_id, create_request_id) where create_request_id is not null
+    do update set create_request_id = excluded.create_request_id
     returning *`;
   return row as unknown as CheckRow;
+}
+
+/** One session admission lock protects both idempotent replays and quota accounting. */
+export async function admitCheck(guestId: string, demoCase: string | null, requestId: string | null) {
+  return db().begin(async (tx) => {
+    await tx`select pg_advisory_xact_lock(hashtext(${`wearcheck:create:${guestId}`}))`;
+    if (requestId) {
+      const [prior] = await tx`select * from wearcheck.checks where guest_session_id = ${guestId} and create_request_id = ${requestId}`;
+      if (prior) {
+        if (prior.status === "deleted" || new Date(prior.expires_at) <= new Date()) throw Errors.notFound();
+        return { check: prior as unknown as CheckRow, replay: true };
+      }
+    }
+    await limitInTransaction(tx, "createCheck", guestId, "new checks in this session");
+    const [row] = await tx`insert into wearcheck.checks (guest_session_id, demo_case, expires_at, create_request_id)
+      values (${guestId}, ${demoCase}, now() + make_interval(hours => ${GUEST_RETENTION_HOURS}), ${requestId}) returning *`;
+    return { check: row as unknown as CheckRow, replay: false };
+  });
 }
 
 /** Throws NOT_FOUND unless the check exists, is live, and belongs to the current guest. */
@@ -133,10 +155,10 @@ export async function photoAsset(check: CheckRow): Promise<AssetRow | null> {
   return (rows[0] as unknown as AssetRow) ?? null;
 }
 
-export type ObservationRow = { id: string; photo_asset_id: string; json: OutfitObservation; user_corrections: UserCorrections; model_id: string; created_at: Date };
+export type ObservationRow = { id: string; photo_asset_id: string; requirements_revision: number | null; json: OutfitObservation; user_corrections: UserCorrections; model_id: string; created_at: Date };
 
-export async function latestObservation(checkId: string, photoAssetId: string): Promise<ObservationRow | null> {
-  const rows = await db()`select * from wearcheck.outfit_observations where check_id = ${checkId} and photo_asset_id = ${photoAssetId} order by created_at desc limit 1`;
+export async function latestObservation(checkId: string, photoAssetId: string, revision?: number): Promise<ObservationRow | null> {
+  const rows = await db()`select * from wearcheck.outfit_observations where check_id = ${checkId} and photo_asset_id = ${photoAssetId} and (${revision ?? null}::integer is null or requirements_revision = ${revision ?? null}) order by created_at desc limit 1`;
   return (rows[0] as unknown as ObservationRow) ?? null;
 }
 
@@ -153,7 +175,8 @@ export async function currentAssessment(check: CheckRow): Promise<AssessmentRow 
     where check_id = ${check.id} and requirements_revision = ${check.requirements_revision}
       and photo_asset_id = ${check.photo_asset_id} and superseded_at is null
     order by created_at desc limit 1`;
-  return (rows[0] as unknown as AssessmentRow) ?? null;
+  const row = rows[0] as unknown as AssessmentRow | undefined;
+  return row?.findings_json.policy_version === ASSESSMENT_POLICY_VERSION ? row : null;
 }
 
 export async function trackEvent(checkId: string | null, eventName: string, metadata: Record<string, string | number | boolean> = {}) {
