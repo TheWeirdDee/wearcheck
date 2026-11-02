@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+/* Reference selection and comparison need the full content width. */
+.workflow-shell:has([data-wide-workflow]) { grid-template-columns: minmax(0, 1fr); }
+.workflow-shell:has([data-wide-workflow]) > aside { display: none; }
+.workflow-shell:has([data-wide-workflow]) .workflow-menu { display: block; }
+
 /*
  * WearCheck design system.
  * Palette: warm ivory paper, charcoal ink, stone surfaces, one muted clay accent.
