@@ -26,21 +26,20 @@ export const POST = handler("render_recheck", async (req: Request, ctx: { params
   const [assessment, reqs] = await Promise.all([currentAssessment(check), currentRequirements(check)]);
   if (!assessment || !reqs || assessment.id !== job.assessment_id) throw new AppError("STALE_PREVIEW", "This preview belongs to an older version of your check.", 409, true, "NONE");
   const finding = assessment.findings_json.findings.find((f) => f.id === job.finding_id);
-  if (!finding) throw new AppError("NO_RULE", "This was an optional preview, so there's no requirement to check it against.", 400, false, "NONE");
 
-  let obs = await latestObservation(check.id, job.result_asset_id as string);
+  let obs = await latestObservation(check.id, job.result_asset_id as string, reqs.revision);
   if (!obs) {
     await limit("vision", check.guest_session_id, "AI readings");
     await limit("visionGlobal", "global", "AI readings today");
     const [asset] = await db()`select storage_key from wearcheck.media_assets where id = ${job.result_asset_id} and check_id = ${check.id}`;
     const { value, model } = await observeOutfit(await getObject(asset.storage_key as string), reqs.json);
     const [row] = await db()`
-      insert into wearcheck.outfit_observations (check_id, photo_asset_id, json, model_id)
-      values (${check.id}, ${job.result_asset_id}, ${db().json(value as never)}, ${model}) returning *`;
+      insert into wearcheck.outfit_observations (check_id, photo_asset_id, json, model_id, requirements_revision)
+      values (${check.id}, ${job.result_asset_id}, ${db().json(value as never)}, ${model}, ${reqs.revision}) returning *`;
     obs = row as unknown as NonNullable<typeof obs>;
   }
   const after = assess(reqs.json, obs.json, {}, previewableCategories());
-  const outcome = recheckOutcome(finding, after);
+  const outcome = recheckOutcome(finding ?? null, after);
   await trackEvent(check.id, "preview_rechecked", { state: outcome.state });
   return json({ ...outcome, model: obs.model_id });
 });
