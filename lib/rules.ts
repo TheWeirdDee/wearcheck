@@ -26,7 +26,6 @@ const MAIN_GARMENT_ORDER = ["dress", "jumpsuit", "suit", "top", "outerwear", "bo
 const CLOTHING = new Set<string>(MAIN_GARMENT_ORDER);
 const NARROW_HEELS: FootwearStyle[] = ["stiletto_heel", "kitten_heel", "heeled_sandal"];
 const SOFT_GROUND = new Set(["grass", "sand", "gravel", "cobblestone"]);
-const PALE: ColourFamily[] = ["white", "ivory_cream", "beige", "silver", "gold"];
 
 export type RenderAvailability = Partial<Record<RenderCategory, boolean>>;
 
@@ -85,7 +84,7 @@ export function assess(
   const noRequirements = req.rules.length === 0 && !req.dress_code && !outdoorsSoftEarly;
   // A cropped photo: say so, and make it blocking when a requirement depends on what's out of frame.
   if (garments.length > 0 && !obs.full_body_visible) {
-    const needsWholeOutfit = Boolean(req.dress_code) || outdoorsSoftEarly || req.rules.some((r) => r.type !== "colour_exclusion" && r.type !== "colour_request");
+    const needsWholeOutfit = !noRequirements;
     findings.push({
       id: id(), rule_id: null, area: "clothing", kind: "visibility", status: "cant_assess",
       observation: "Only part of your outfit is visible in this photo.",
@@ -126,9 +125,8 @@ export function assess(
     }
     const seen = garments.map((g) => ({ g, ...colourOf(g) }));
     const hits = seen.filter((x) => r.colours.includes(x.colour));
-    const near = seen.filter((x) => !r.colours.includes(x.colour) && PALE.includes(x.colour) && r.colours.some((c) => PALE.includes(c)));
     const clearHits = hits.filter((x) => x.clear);
-    const unsure = [...hits, ...near].filter((x) => !x.clear);
+    const unsure = seen.filter((x) => !x.clear);
 
     if (clearHits.length) {
       const hard = r.severity === "hard" && r.source !== "suggested";
@@ -139,7 +137,7 @@ export function assess(
       const rest = clearHits.length > 1 ? ` A preview changes one garment at a time, so the other ${clearHits.length === 2 ? "one" : "ones"} would stay.` : "";
       findings.push({
         id: id(), rule_id: r.id, area: "colour", kind: hard ? "explicit_rule" : "explicit_preference",
-        status: hard ? "conflict" : "consider_change",
+      status: hard ? "conflict" : "consider_change",
         observation: `${target.confirmed ? "You confirmed" : "Your photo shows"} ${named.join(" and ")}.${rest}`,
         reason: `${r.source === "invitation" ? "The invitation says" : "You noted"}: “${quote}”. This covers all visible clothing, not only the main piece.`,
         evidence_text: r.evidence_text, evidence_source: target.confirmed ? "user_correction" : sourceLabel(r), uncertainty: null,
@@ -158,7 +156,7 @@ export function assess(
       }
       findings.push({
         id: id(), rule_id: r.id, area: "colour", kind: "explicit_rule", status: "cant_assess",
-        observation: `Your ${garmentName(x.g)} looks pale, but photos can shift colour${colourLighting ? "" : " — especially in this lighting"}.`,
+        observation: `The colour of your ${garmentName(x.g)} is uncertain${colourLighting ? "." : " in this lighting."}`,
         reason: `The event asks: “${quote}”. We need you to confirm the colour before saying anything definite.`,
         evidence_text: r.evidence_text, evidence_source: sourceLabel(r), uncertainty: "Garment colour from a photo is uncertain.",
         user_action: "none", render_category: null, rank: 1,
@@ -177,7 +175,7 @@ export function assess(
     if (!main || !mainColour) continue;
     const matches = r.colours.includes(mainColour);
     findings.push({
-      id: id(), rule_id: r.id, area: "colour", kind: "explicit_preference", status: matches || !colourClear ? "ok" : "consider_change",
+      id: id(), rule_id: r.id, area: "colour", kind: "explicit_preference", status: !colourClear ? "cant_assess" : matches ? "ok" : "consider_change",
       observation: `Your ${main.category} appears ${COLOUR_LABEL[mainColour]}.`, reason: `The event mentions: “${r.evidence_text ?? r.summary}”. This is a request, not a strict rule.`,
       evidence_text: r.evidence_text, evidence_source: sourceLabel(r), uncertainty: colourClear ? null : "Colour judged from the photo.",
       user_action: !matches && mainCategory && available[mainCategory] ? "preview_garment" : "none", render_category: !matches ? mainCategory : null, rank: 40,
@@ -186,7 +184,7 @@ export function assess(
 
   // ---------- footwear ----------
   const shoesItem = items.find((i) => i.category === "shoes") ?? null;
-  const shoesAssessable = obs.feet_visible === "yes" && obs.full_body_visible && Boolean(shoesItem) && !lowConfidenceImage;
+  const shoesAssessable = obs.feet_visible === "yes" && obs.full_body_visible && shoesItem?.visibility === "clear" && !lowConfidenceImage;
   const style: FootwearStyle | null = corr.footwear_style ?? shoesItem?.footwear_style ?? null;
   // A footwear rule without a recognised style can't be checked mechanically; it's asked about below instead.
   const isFoot = (r: Rule) => r.type === "footwear_preference" || r.type === "footwear_requirement";
@@ -353,13 +351,16 @@ export function assess(
   }
 
   // ---------- what a try-on could replace from this photo ----------
-  const upperVisible = garments.some((g) => ["top", "suit", "dress", "jumpsuit", "outerwear"].includes(g.item.category));
+  const upperVisible = garments.some((g) => g.item.visibility === "clear" && ["top", "suit", "dress", "jumpsuit", "outerwear"].includes(g.item.category));
+  const providerReady = obs.face_visible && (obs.facing === "front" || obs.facing === "angled") && !lowConfidenceImage;
+  const providerReason = !obs.face_visible ? "YouCam needs your face visible in the source photo." : "YouCam needs a clear front-facing or slightly angled photo.";
   const supports: PhotoSupport = {
     shoes: shoesAssessable ? { ok: true, reason: "Your shoes are clearly visible." } : { ok: false, reason: obs.feet_visible === "yes" ? "Your shoes aren't clear enough in this photo." : "Your feet aren't fully in frame." },
     full_body: obs.full_body_visible && garments.length > 0 && !lowConfidenceImage ? { ok: true, reason: "Your whole outfit is visible." } : { ok: false, reason: "A full-outfit change needs a head-to-toe photo." },
     upper_body: upperVisible && !lowConfidenceImage ? { ok: true, reason: "Your top is visible." } : { ok: false, reason: "Your top isn't clearly visible." },
     outer: upperVisible && !lowConfidenceImage ? { ok: true, reason: "Your upper body is visible." } : { ok: false, reason: "Your upper body isn't clearly visible." },
   };
+  if (!providerReady) for (const category of Object.keys(supports) as RenderCategory[]) supports[category] = { ok: false, reason: providerReason };
   const observed: ObservedOutfit = {
     garments: garments.map((g) => ({ category: g.item.category, colour: colourOf(g).colour, description: g.item.description })),
     shoe_style: shoesAssessable ? style : null,
@@ -393,14 +394,15 @@ function finalize(findings: Finding[], clarification: Clarification | null, avai
 
   // "Compatible" needs at least one requirement actually checked; nothing supplied is its own state.
   const anyChecked = ctx.checks.some((c) => c.result === "ok");
+  const unchecked = ctx.checks.some((c) => c.result === "not_checked");
   const status: AssessmentResult["status"] = ctx.noRequirements ? "no_requirements"
     : hasConflict ? "conflict"
-      : clarification || material ? "insufficient"
+      : clarification || material || unchecked ? "insufficient"
         : hasChange ? "consider_change"
           : anyChecked ? "compatible" : "insufficient";
 
   const key = sorted.find((f) => f.status === "conflict" || f.status === "consider_change") ?? (status === "insufficient" ? sorted.find((f) => f.status === "cant_assess") : null) ?? null;
-  const action = key && key.render_category && key.user_action !== "none" && key.user_action !== "retake_photo" && available[key.render_category]
+  const action = key && key.render_category && ctx.supports[key.render_category].ok && key.user_action !== "none" && key.user_action !== "retake_photo" && available[key.render_category]
     ? { finding_id: key.id, render_category: key.render_category } : null;
 
   const row = (area: FindingArea): AssessmentResult["rows"][FindingArea] => {
@@ -457,7 +459,8 @@ export function recheckOutcome(original: Pick<Finding, "rule_id" | "area" | "ren
   const same = after.findings.filter((f) => (original.rule_id ? f.rule_id === original.rule_id : f.area === original.area && f.rule_id === null));
   const bad = same.find((f) => f.status === "conflict" || f.status === "consider_change");
   if (bad) return { state: "still_conflicts", note: bad.observation };
-  if (same.length && same.every((f) => f.status === "ok")) return { state: "appears_resolved", note: same[0].observation };
-  if (!original.rule_id && same.length === 0 && after.status !== "insufficient") return { state: "appears_resolved", note: "No practical concern was found in the preview." };
+  const visible = original.render_category === "shoes" ? after.shoes_assessable : after.photo_supports?.full_body.ok === true;
+  if (visible && same.length && same.every((f) => f.status === "ok")) return { state: "appears_resolved", note: same[0].observation };
+  if (visible && !original.rule_id && same.length === 0 && after.status === "compatible") return { state: "appears_resolved", note: "No practical concern was found in the preview." };
   return { state: "unclear", note: same.find((f) => f.status === "cant_assess")?.observation ?? "The preview couldn't be read clearly enough to tell." };
 }
