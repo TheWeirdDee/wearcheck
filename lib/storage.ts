@@ -13,6 +13,7 @@ function sb() {
   if (!client) {
     client = createClient(env().SUPABASE_URL, env().SUPABASE_SERVICE_ROLE_KEY, {
       auth: { persistSession: false, autoRefreshToken: false },
+      global: { fetch: (input, init) => fetch(input, { ...init, signal: AbortSignal.any([AbortSignal.timeout(20_000), ...(init?.signal ? [init.signal] : [])]) }) },
     });
   }
   return client;
