@@ -6,6 +6,7 @@ import { CATEGORY_META } from "@/lib/categories";
 import { catalogueCount, rankOptions } from "@/lib/catalogue";
 import { currentAssessment, currentRequirements, photoAsset, requireOwnedCheck } from "@/lib/checks";
 import { RenderCategory, type AssessmentResult, type PhotoSupport } from "@/lib/schemas";
+import { jobsForCheck } from "@/lib/jobs";
 
 export const metadata: Metadata = { title: "Choose a change" };
 
@@ -85,7 +86,10 @@ export default async function OptionsPage({ params, searchParams }: { params: Pr
   }
 
   if (!supports[category].ok) redirect(`/check/${check.id}/options?explore=1`);
-  const ranked = rankOptions({ render_category: category, rule_id: key?.rule_id ?? null }, reqs.json, res.observed);
+  // Attempts survive refresh, navigation and session restoration. An earlier requirements
+  // revision starts a fresh choice set; identical submissions still reopen the existing job.
+  const attempted = (await jobsForCheck(check.id)).filter((j) => j.assessment_id === assessment.id).flatMap((j) => j.catalogue_item_id ? [j.catalogue_item_id] : []);
+  const ranked = rankOptions({ render_category: category, rule_id: key?.rule_id ?? null }, reqs.json, res.observed, attempted);
   const items: OptionItem[] = ranked.map(({ item: c, reasons }) => ({
     id: c.id, title: c.title, category: c.category, file: c.file, tags: c.tags, creator: c.creator,
     licence: c.licence, licence_url: c.licence_url, source_name: c.source_name, source_url: c.source_url, reasons,
@@ -96,13 +100,16 @@ export default async function OptionsPage({ params, searchParams }: { params: Pr
 
   return (
     <OptionsView
+      key={`${assessment.id}:${category}`}
       checkId={check.id}
+      selectionKey={`${assessment.id}:${category}`}
       findingId={key ? key.id : null}
       category={category}
       why={why}
       photoUrl={photoUrl}
       items={items}
       catalogueTotal={catalogueCount(category)}
+      attemptedCount={attempted.length}
       changeCategoryHref={key ? null : `/check/${check.id}/options?explore=1`}
     />
   );
