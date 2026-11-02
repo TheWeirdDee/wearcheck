@@ -60,6 +60,7 @@ export default async function DecisionPage({ params }: { params: Promise<{ id: s
               <div className="py-4"><dt className="text-[0.875rem] text-muted">Reference item</dt><dd className="mt-1">{d.item.title}<span className="block text-[0.8125rem] text-muted">{d.item.creator}, {d.item.licence} · Visual reference — not a live shopping listing.</span></dd></div>
             ) : d.userRefAssetId ? <div className="py-4"><dt className="text-[0.875rem] text-muted">Reference item</dt><dd className="mt-1">Provided by you</dd></div> : null}
           </dl>
+          {!keep && d.recheck?.checks?.length ? <section className="mt-6" aria-label="Chosen preview requirements"><h2 className="font-semibold">Whole preview recheck</h2><ul className="mt-3 space-y-3">{d.recheck.checks.map((c, i) => <li key={i}><strong>{c.label}: {c.result === "ok" ? "appears met" : c.result === "issue" ? "remaining issue" : "not checked"}</strong><p className="text-sm text-ink-2">{c.note}</p></li>)}</ul></section> : null}
           {!keep && kf && d.recheck?.state !== "appears_resolved" && unresolvedNote(kf, r) ? <p className="mt-4 border-l-2 border-warn pl-3 text-[0.95rem]">{unresolvedNote(kf, r)}</p> : null}
           <p className="mt-4 text-[0.9rem] text-muted">{CARD_DISCLAIMER}</p>
 
