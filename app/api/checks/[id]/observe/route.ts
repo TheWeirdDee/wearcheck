@@ -23,7 +23,7 @@ export const POST = handler("observe", async (req: Request, ctx: { params: Promi
   const photo = await photoAsset(check);
   if (!photo) throw new AppError("NO_PHOTO", "Please add your outfit photo first.", 409, true, "RETAKE_PHOTO");
 
-  const existing = await latestObservation(check.id, photo.id);
+  const existing = await latestObservation(check.id, photo.id, reqs.revision);
   // Rule checks depend on the rule ids, so re-observe when the requirements revision introduced new free-text rules.
   const needsRuleChecks = reqs.json.rules.some((r) => ["garment_exclusion", "garment_requirement", "coverage", "other"].includes(r.type) && !existing?.json.rule_checks.some((c) => c.rule_id === r.id));
   if (existing && !body.force && !needsRuleChecks) return json({ observationId: existing.id, cached: true });
@@ -32,7 +32,7 @@ export const POST = handler("observe", async (req: Request, ctx: { params: Promi
   await limit("visionGlobal", "global", "AI readings today");
   const { value: observation, model } = await observeOutfit(await getObject(photo.storage_key), reqs.json);
   const [row] = await db()`
-    insert into wearcheck.outfit_observations (check_id, photo_asset_id, json, user_corrections, model_id)
-    values (${check.id}, ${photo.id}, ${db().json(observation as never)}, ${db().json((existing?.user_corrections ?? {}) as never)}, ${model}) returning id`;
+    insert into wearcheck.outfit_observations (check_id, photo_asset_id, json, user_corrections, model_id, requirements_revision)
+    values (${check.id}, ${photo.id}, ${db().json(observation as never)}, ${db().json((existing?.user_corrections ?? {}) as never)}, ${model}, ${reqs.revision}) returning id`;
   return json({ observationId: row.id, cached: false });
 });
