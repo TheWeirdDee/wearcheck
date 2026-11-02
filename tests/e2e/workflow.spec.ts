@@ -296,6 +296,22 @@ async function renderJourney(page: Page, browser: Browser, context: BrowserConte
   await expect(page.getByRole("heading", { name: "Your AI preview" })).toBeVisible({ timeout: 6 * 60_000 });
   const img = page.locator('img[alt^="AI-generated preview"]').first();
   await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth), { timeout: 30_000 }).toBeGreaterThan(0);
+  // Real provider evidence: the chosen uploaded asset's exact normalized bytes, not
+  // merely the original filename or a different catalogue reference, reached submission.
+  loadEnv();
+  const postgres = (await import("postgres")).default;
+  const proofSql = postgres(process.env.SUPABASE_DB_URL!, { max: 1, prepare: false });
+  try {
+    const [proof] = await proofSql`select j.provider_task_id, j.input_provenance, j.user_ref_asset_id,
+      src.sha256 as source_sha256, ref.sha256 as reference_sha256
+      from wearcheck.render_jobs j join wearcheck.media_assets src on src.id=j.source_asset_id
+      left join wearcheck.media_assets ref on ref.id=j.user_ref_asset_id
+      where j.id=${jobId} and j.check_id=${checkId}`;
+    expect(proof.provider_task_id).toBeTruthy();
+    expect(proof.input_provenance.sourceSha256).toBe(proof.source_sha256);
+    if (o.upload) expect(proof.input_provenance).toMatchObject({ userAssetId: proof.user_ref_asset_id, referenceSha256: proof.reference_sha256, feature: "shoes-transfer", category: "shoes", catalogueItemId: null });
+    await test.info().attach("actual-provider-input.json", { body: JSON.stringify(proof, null, 2), contentType: "application/json" });
+  } finally { await proofSql.end(); }
 
   // An obvious comparison: whole frame in view (short desktop window too), and a zoom onto what changed.
   for (const size of [{ width: 1280, height: 720 }, { width: 1440, height: 900 }]) {
