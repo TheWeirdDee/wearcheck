@@ -14,12 +14,15 @@ const STEPS = [
 ];
 
 /** Direct entry point. Creating a check is a POST (no state change on GET). */
-export default function NewCheckPage() {
+export default async function NewCheckPage({ searchParams }: { searchParams: Promise<{ startError?: string; retryAfter?: string }> }) {
+  const sp = await searchParams;
+  const minutes = Math.max(1, Math.min(60, Math.ceil((Number(sp.retryAfter) || 60) / 60)));
   return (
     <main id="main" className="wrap grid gap-10 py-10 md:grid-cols-[minmax(0,7fr)_minmax(0,5fr)] md:gap-14 lg:py-16 [&>*]:min-w-0">
       <div className="flex flex-col justify-center">
         <p className="eyebrow">New check</p>
         <h1 className="t-1 mt-5 max-w-[14ch]">Start an outfit check.</h1>
+        {sp.startError ? <p role="alert" className="mt-4 border-l-2 border-warn pl-3">{sp.startError === "limit" ? `This session has reached its new-check limit. Try again in about ${minutes} minute(s).` : "We couldn't start your check. Please try again shortly."} <a href="/looks" className="underline">Your saved checks remain available.</a></p> : null}
         <p className="lede mt-5 max-w-[40ch]">No sign-up. Your check is private to this browser, locks after 24 hours and is deleted by a daily cleanup within the next day.</p>
         <ol className="mt-9 divide-y divide-line border-y border-line">
           {STEPS.map(([t, d], i) => (
