@@ -180,7 +180,7 @@ async function submit(job: JobRow, demoCase: string | null): Promise<JobRow> {
   } catch (e) {
     // A definite HTTP rejection from createTask means no task exists; a timeout, network error or
     // malformed reply after the request was sent leaves the outcome unknown.
-    const definite = e instanceof ProviderError && e.code !== "PROVIDER_MALFORMED";
+    const definite = e instanceof ProviderError && ["PROVIDER_AUTH", "PROVIDER_BUSY", "PROVIDER_QUOTA", "PROVIDER_REJECTED"].includes(e.code);
     const unknown = (creating && !taskId && !definite) || Boolean(taskId);
     const pe = e instanceof AppError ? e : new ProviderError("PROVIDER_DOWN", "The preview service couldn't be reached.", 502, true);
     const code = unknown ? "SUBMIT_OUTCOME_UNKNOWN" : pe.code;
