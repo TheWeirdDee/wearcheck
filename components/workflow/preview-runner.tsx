@@ -7,6 +7,7 @@ import { MotionConfig, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { api, ClientApiError } from "@/lib/client";
 import type { PublicJob } from "@/lib/jobs";
+import type { CheckLine } from "@/lib/schemas";
 import { RECHECK_LABEL, type RecheckState } from "@/lib/rules";
 import { CheckIcon, DownloadIcon } from "../icons";
 import { Compare } from "./compare";
@@ -21,7 +22,7 @@ type Props = {
   /** What the person should check in the generated image. */
   unresolvedNote: string | null;
   /** Set when the preview addresses a requirement, so it can be re-read against it. */
-  recheck: { available: boolean; initial: { state: RecheckState; note: string } | null };
+  recheck: { available: boolean; initial: { state: RecheckState; note: string; checks?: CheckLine[] } | null };
   /** Other supported operations to offer if the problem remains (e.g. an outer layer instead of a top). */
   alternatives: { href: string; label: string }[];
 };
@@ -43,7 +44,7 @@ export function PreviewRunner({ checkId, initialJob, originalUrl, item, unresolv
     setRechecking(true);
     setError(null);
     try {
-      const r = await api<{ state: RecheckState; note: string }>(`/api/render-jobs/${initialJob.id}/recheck`, { method: "POST" });
+      const r = await api<{ state: RecheckState; note: string; checks: CheckLine[] }>(`/api/render-jobs/${initialJob.id}/recheck`, { method: "POST" });
       setOutcome(r);
     } catch (e) {
       setError(e instanceof ClientApiError ? e.body.message : "Couldn't re-read the preview.");
@@ -158,15 +159,16 @@ export function PreviewRunner({ checkId, initialJob, originalUrl, item, unresolv
             <p className="mt-2 text-ink-2">{item.reason}</p>
             {recheck.available ? (
               <section className={`mt-5 border-l-2 p-4 ${outcome?.state === "appears_resolved" ? "border-ok bg-raised" : "border-warn bg-raised"}`} aria-labelledby="h-outcome" data-testid="preview-outcome">
-                <h3 id="h-outcome" className="font-semibold">Has this resolved it?</h3>
+                <h3 id="h-outcome" className="font-semibold">Does the whole outfit meet the requirements?</h3>
                 <p className="mt-1 text-[0.95rem] font-medium" role="status">{RECHECK_LABEL[outcome?.state ?? "none"]}</p>
                 {outcome ? <p className="mt-1 text-[0.95rem] text-ink-2">{outcome.note}</p> : unresolvedNote ? <p className="mt-1 text-[0.95rem] text-ink-2">{unresolvedNote}</p> : null}
+                {outcome?.checks?.length ? <ul className="mt-3 space-y-2 text-[0.9rem]" aria-label="Generated outfit requirements">{outcome.checks.map((c, i) => <li key={i}><strong>{c.label}: {c.result === "ok" ? "appears met" : c.result === "issue" ? "remaining issue" : "not checked"}</strong><p>{c.note}</p></li>)}</ul> : null}
                 {!outcome ? (
                   <button type="button" className="btn btn-secondary btn-sm mt-3" onClick={runRecheck} disabled={rechecking} aria-busy={rechecking}>
-                    {rechecking ? "Re-reading the preview…" : "Check the preview against the rule"}
+                    {rechecking ? "Re-reading the preview…" : "Check all requirements"}
                   </button>
                 ) : null}
-                {!outcome ? <p className="mt-2 text-[0.8125rem] text-muted">Google Gemini re-reads the generated image and WearCheck applies the same rule. It&rsquo;s an AI reading, not a guarantee.</p> : null}
+                {!outcome ? <p className="mt-2 text-[0.8125rem] text-muted">Google Gemini re-reads the whole generated image and WearCheck applies all confirmed requirements, including other layers and shoes. It&rsquo;s an AI reading, not a guarantee.</p> : null}
                 {outcome && outcome.state !== "appears_resolved" && alternatives.length ? (
                   <div className="mt-3 flex flex-wrap gap-2">
                     {alternatives.map((a) => <Link key={a.href} href={a.href} className="btn btn-secondary btn-sm">{a.label}</Link>)}
@@ -176,9 +178,10 @@ export function PreviewRunner({ checkId, initialJob, originalUrl, item, unresolv
             ) : unresolvedNote ? <p className="mt-4 border-l-2 border-warn pl-3 text-[0.95rem]">{unresolvedNote}</p> : null}
             {item.credit ? <p className="photo-credit mt-2">{item.credit}</p> : null}
             <div className="mt-8 flex flex-col gap-3 border-t border-line pt-6">
-              {!job.stale ? <button type="button" className="btn btn-primary" onClick={() => decide("change")} disabled={busy}>Use this look</button> : null}
+              {!job.stale ? <button type="button" className="btn btn-primary" onClick={() => decide("change")} disabled={busy || (recheck.available && !outcome)}>Use this look</button> : null}
+              {recheck.available && !outcome ? <p className="text-sm text-ink-2">Check all requirements above before saving this preview. You can keep your original at any time.</p> : outcome?.state !== "appears_resolved" ? <p className="text-sm text-warn">Saving this choice retains the unresolved findings; it does not certify the outfit.</p> : null}
               <a href={`${job.resultUrl}?download=1`} className="btn btn-secondary"><DownloadIcon /> Download image</a>
-              <Link href={`/check/${checkId}/options`} className="btn btn-secondary">Try another item</Link>
+              <Link href={`/check/${checkId}/options?${job.findingId ? `finding=${encodeURIComponent(job.findingId)}` : "explore=1"}&category=${job.category}`} className="btn btn-secondary">Try another item</Link>
               <button type="button" className="btn btn-quiet" onClick={() => decide("keep")} disabled={busy}>Keep original</button>
             </div>
             {job.completedAt && job.submittedAt ? <p className="mt-4 text-[0.875rem] text-muted">Generated in {Math.round((new Date(job.completedAt).getTime() - new Date(job.submittedAt).getTime()) / 1000)}s · saved privately to this check.</p> : null}
