@@ -28,6 +28,12 @@ describe("distinct reference provenance", () => {
   it("never hides white stripes when applying a white exclusion", () => {
     expect(rankOptions(target, req("No white")).map((x) => x.item.id)).toEqual(["top-blue-shirt"]);
   });
+  it("a green-and-white pattern is distinct from a solid white shirt; a solid blue shirt is not new for an observed blue shirt", () => {
+    const r = req("No red");
+    const observed = { garments: [{ category: "top", colour: "white" as const, description: "white shirt" }], shoe_style: null };
+    expect(rankOptions(target, r, observed).map((x) => x.item.id)).toHaveLength(2);
+    expect(rankOptions(target, r, { ...observed, garments: [{ ...observed.garments[0], colour: "blue", description: "blue shirt" }] }).map((x) => x.item.id)).toEqual(["top-green-seersucker"]);
+  });
   it("the manifest hashes match the actual bytes sent by referenceBytes", () => {
     for (const c of CATALOGUE) {
       const expected = (fingerprints as Record<string, { sha256: string }>)[c.file];
@@ -39,6 +45,9 @@ describe("distinct reference provenance", () => {
     const a = CATALOGUE.find((x) => x.id === "top-blue-shirt")!;
     expect(sameReferenceImage(a, { ...a })).toBe(true);
     expect(sameReferenceImage(a, { ...a, file: "alternate-crop.jpg" })).toBe(true);
+  });
+  it("withholds worn-on-a-person catalogue references from fresh product-photo selections", () => {
+    expect(rankOptions({ render_category: "shoes", rule_id: null }, req("Heels or wedges required")).map((x) => x.item.id)).not.toContain("wedge-black-sandal");
   });
   it("honours sleeve exclusion polarity", () => {
     const rule = { id: "sleeves", type: "garment_exclusion", summary: "No long sleeves", evidence_text: null, source: "user", severity: "hard", colours: [], footwear_avoid: [], footwear_prefer: [] } as Rule;
