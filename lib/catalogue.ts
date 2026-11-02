@@ -233,7 +233,7 @@ export function meetsRule(item: CatalogueItem, r: Rule): boolean | "unknown" {
 }
 
 /**
- * Filters to items that address the finding without breaking any other confirmed rule. Max 3.
+ * Filters to all items whose applicable confirmed constraints can be verified.
  * The finding's own rule must be positively met; other garment/coverage rules must not be broken.
  * Used both to show options and to re-validate a render request on the server.
  */
@@ -246,7 +246,7 @@ export function optionsFor(finding: Pick<Finding, "render_category" | "rule_id">
     .filter((c) => !c.colours.some((col) => excluded.has(col)))
     .filter((c) => garmentRules.every((r) => {
       const ok = meetsRule(c, r);
-      return r === rule ? ok === true : ok !== false;
+      return ok === true;
     }))
     .filter((c) => {
       if (c.category !== "shoes" || !c.footwear_style) return true;
@@ -296,7 +296,7 @@ export function rankOptions(target: { render_category: RenderCategory; rule_id: 
     if (current && item.colours.includes(current.colour)) { reasons.push(`Same colour as your current ${current.category}, so the change may be subtle`); score -= 1; }
     else if (current) { reasons.push(`Different from your current ${current.colour === "other" ? "" : `${COLOUR_LABEL[current.colour]} `}${current.category}`); score += 0.5; }
     if (item.category === "shoes" && observed?.shoe_style && item.footwear_style === observed.shoe_style) { reasons.push("A similar style to the shoes you have"); score -= 1; }
-    if (!reasons.length) reasons.push("Doesn't break any of your confirmed requirements");
+    if (!reasons.length) reasons.push("Available reference in the category you chose; no specific matching preference was supplied");
     return { item, reasons, score };
   }).sort((a, b) => b.score - a.score);
 }
