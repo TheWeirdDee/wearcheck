@@ -14,8 +14,8 @@ const ORDER: RenderCategory[] = ["upper_body", "outer", "full_body", "shoes"];
 /** Older stored assessments have no photo_supports; derive the conservative equivalent. */
 function supportsOf(res: AssessmentResult): PhotoSupport {
   if (res.photo_supports) return res.photo_supports;
-  const ok = { ok: true, reason: "" };
-  return { upper_body: ok, outer: ok, full_body: ok, shoes: res.shoes_assessable ? ok : { ok: false, reason: "Your feet aren't fully in frame." } };
+  const unknown = { ok: false, reason: "Re-read your photo on the assessment before choosing a preview." };
+  return { upper_body: unknown, outer: unknown, full_body: unknown, shoes: unknown };
 }
 
 export default async function OptionsPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ explore?: string; finding?: string; category?: string }> }) {
