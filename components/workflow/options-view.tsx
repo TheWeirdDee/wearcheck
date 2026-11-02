@@ -3,10 +3,11 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CATEGORY_META } from "@/lib/categories";
 import { api, ClientApiError, prepareImage } from "@/lib/client";
 import type { RenderCategory } from "@/lib/schemas";
+import { sameReferenceImage } from "@/lib/catalogue";
 
 export type OptionItem = {
   id: string; title: string; category: RenderCategory; file: string; tags: string[];
@@ -17,6 +18,7 @@ export type OptionItem = {
 
 type Props = {
   checkId: string;
+  selectionKey?: string;
   /** The finding this change addresses, or null for an optional change. */
   findingId: string | null;
   category: RenderCategory;
@@ -25,6 +27,7 @@ type Props = {
   items: OptionItem[];
   /** All reference items in this category, before filtering by requirements. */
   catalogueTotal: number;
+  attemptedCount?: number;
   changeCategoryHref: string | null;
 };
 
@@ -44,6 +47,24 @@ export function OptionsView(p: Props) {
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const inFlight = useRef(false);
+  const [rejected, setRejected] = useState<string[]>([]);
+  const storageKey = `wearcheck:choice:${p.checkId}:${p.selectionKey ?? p.category}`;
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(storageKey) ?? "null") as { selected?: string; rejected?: string[] } | null;
+      queueMicrotask(() => {
+        setRejected(Array.isArray(saved?.rejected) ? saved.rejected.filter((id) => typeof id === "string") : []);
+        const item = p.items.find((it) => it.id === saved?.selected);
+        setSelected(item ? { kind: "item", item } : null);
+      });
+    } catch { /* Storage may be unavailable; generation still works. */ }
+  }, [storageKey, p.items]);
+  function remember(item: OptionItem | null, rejectedIds = rejected) {
+    setSelected(item ? { kind: "item", item } : null);
+    setRejected(rejectedIds);
+    try { localStorage.setItem(storageKey, JSON.stringify({ selected: item?.id, rejected: rejectedIds })); } catch { /* private browsing */ }
+  }
+  const visibleItems = p.items.filter((it) => !p.items.some((other) => rejected.includes(other.id) && sameReferenceImage(it, other)));
 
   async function uploadOwn(f: File | undefined) {
     if (!f) return;
@@ -109,7 +130,7 @@ export function OptionsView(p: Props) {
       {/* Path 1: the person's own item */}
       <section className="mt-10 border border-line-strong p-5 sm:p-6" aria-labelledby="h-own">
         <h2 id="h-own" className="t-3">Try an item you own or are considering</h2>
-        <p className="mt-2 max-w-[60ch] text-ink-2">A clear, front-facing photo of one {p.category === "shoes" ? "pair of shoes" : "garment"} on a plain background, or a product photo. It&rsquo;s marked &ldquo;Provided by you&rdquo; and stays private to this check. WearCheck does not verify the uploaded item&rsquo;s category or suitability: check it against your requirements before generating.</p>
+        <p className="mt-2 max-w-[60ch] text-ink-2">A clear, front-facing product photo of one {p.category === "shoes" ? "pair of shoes" : "garment"} on a plain background. It&rsquo;s marked &ldquo;Provided by you&rdquo; and stays private to this check. Gemini checks its category and visible attributes against your requirements before generation. Conflicting or uncertain references are withheld. The generated whole outfit still needs a separate recheck.</p>
         <label className="mt-4 flex cursor-pointer items-start gap-3 text-[0.95rem]">
           <input type="checkbox" className="mt-0.5 size-5 accent-[var(--ink)]" checked={rights} onChange={(e) => setRights(e.target.checked)} />
           I own this image or have permission to use it, and it shows no one other than a consenting adult.
@@ -135,15 +156,17 @@ export function OptionsView(p: Props) {
         <p className="mt-2 max-w-[68ch] text-ink-2" data-testid="catalogue-note">
           {p.catalogueTotal === 0
             ? "WearCheck has no reference items for this category. Upload your own item above."
-            : p.items.length === 0
-              ? `None of WearCheck's ${p.catalogueTotal} reference ${p.catalogueTotal === 1 ? "item" : "items"} for this category meets your confirmed requirements, so none is offered. Upload your own item above — WearCheck can't confirm it meets the rule either.`
+            : visibleItems.length === 0
+              ? `No different eligible reference remains in this category. References already tried on this assessment are excluded. Upload another item for a suitability check, edit your requirements, or keep your original outfit.`
               : p.catalogueTotal === 1
                 ? "WearCheck has one licensed reference photo for this category, and it fits your confirmed requirements. It's an example to visualise the change — not a product, stock or a personal recommendation."
-                : `WearCheck has ${p.catalogueTotal} licensed reference photos for this category; ${p.items.length === p.catalogueTotal ? "all of them fit" : `${p.items.length} ${p.items.length === 1 ? "fits" : "fit"}`} your confirmed requirements, ranked below. It's a small demo set of examples — not products, stock or personal recommendations.`}
+                : `WearCheck has ${p.catalogueTotal} licensed reference photos for this category; ${visibleItems.length} different eligible ${visibleItems.length === 1 ? "reference remains" : "references remain"}, ranked below. Previously tried or rejected items are excluded. It's a small set of examples — not products, stock or personal recommendations.`}
         </p>
-        {p.items.length ? (
-          <ul className={`mt-6 grid gap-x-6 gap-y-10 ${p.items.length === 1 ? "grid-cols-1" : "grid-cols-[repeat(auto-fit,minmax(min(100%,19rem),1fr))]"}`} data-testid="catalogue">
-            {p.items.map((it, i) => {
+        {p.attemptedCount ? <p className="mt-2 text-sm text-ink-2">Previously tried references are excluded. {p.items.length === 1 ? "Only one different eligible reference remains." : `${p.items.length} different eligible references remain.`}</p> : null}
+        {rejected.length ? <button type="button" className="btn btn-quiet btn-sm mt-3" onClick={() => remember(null, [])}>Restore references I rejected</button> : null}
+        {visibleItems.length ? (
+          <ul className={`mt-6 grid gap-x-6 gap-y-10 ${visibleItems.length === 1 ? "grid-cols-1" : "grid-cols-[repeat(auto-fit,minmax(min(100%,19rem),1fr))]"}`} data-testid="catalogue">
+            {visibleItems.map((it, i) => {
               const on = selected?.kind === "item" && selected.item.id === it.id;
               return (
                 <li key={it.id} className={`min-w-0 p-4 ${p.items.length === 1 ? "grid items-start gap-6 sm:grid-cols-2" : "flex flex-col"} ${on ? "outline-2 outline-ink" : "outline outline-1 outline-line"}`}>
@@ -160,9 +183,10 @@ export function OptionsView(p: Props) {
                       Visual reference, not a shopping listing. Image: {it.creator}, <a href={it.licence_url} target="_blank" rel="license noopener noreferrer" className="underline">{it.licence}</a> ·{" "}
                       <a href={it.source_url} target="_blank" rel="noopener noreferrer" className="underline">source</a>
                     </p>
-                    <button type="button" className={`btn btn-sm mt-4 ${on ? "btn-primary" : "btn-secondary"}`} aria-pressed={on} onClick={() => setSelected({ kind: "item", item: it })}>
+                    <button type="button" className={`btn btn-sm mt-4 ${on ? "btn-primary" : "btn-secondary"}`} aria-pressed={on} onClick={() => remember(it)}>
                       {on ? "Selected" : "Select this item"}
                     </button>
+                    <button type="button" className="btn btn-quiet btn-sm mt-2" onClick={() => remember(selected?.kind === "item" && selected.item.id !== it.id ? selected.item : null, [...rejected, it.id])}>Not this item</button>
                   </div>
                 </li>
               );
