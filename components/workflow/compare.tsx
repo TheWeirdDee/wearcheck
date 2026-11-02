@@ -91,7 +91,7 @@ export function Compare({ originalUrl, previewUrl, previewAlt }: { originalUrl: 
   const frameMax = "calc(100svh - 10.75rem)";
 
   return (
-    <div>
+    <div data-wide-workflow>
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <div className="inline-flex border border-ink" role="group" aria-label="Comparison view">
           {(["original", "slider", "preview"] as const).map((m) => (
