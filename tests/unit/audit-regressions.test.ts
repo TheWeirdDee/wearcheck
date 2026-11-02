@@ -189,7 +189,7 @@ describe("cropped photos and missing requirements (November 2026 review)", () =>
     const r = assess(req("", { event_type: "celebration" }), selfie, {}, ALL);
     expect(r.photo_supports?.shoes.ok).toBe(false);
     expect(r.photo_supports?.full_body.ok).toBe(false);
-    expect(r.photo_supports?.upper_body.ok).toBe(true);
+    expect(r.photo_supports?.upper_body.ok).toBe(false); // a partial top is not a usable provider input
   });
 });
 
