@@ -106,12 +106,12 @@ export function unresolvedNote(finding: Finding, r: Requirements): string | null
   const rule = finding.rule_id ? r.rules.find((x) => x.id === finding.rule_id) : null;
   const quote = rule ? `“${rule.evidence_text ?? rule.summary}”` : null;
   if (rule?.type === "colour_exclusion") {
-    return `WearCheck doesn't re-check the generated image. If any ${rule.colours.map((c) => COLOUR_LABEL[c]).join(" or ")} clothing is still visible in the preview — a layer underneath, cuffs, a collar — it hasn't resolved ${quote}.`;
+    return `Generation alone doesn't verify the requirement. If any ${rule.colours.map((c) => COLOUR_LABEL[c]).join(" or ")} clothing is still visible in the preview — a layer underneath, cuffs, a collar — it hasn't resolved ${quote}.`;
   }
   if (rule && (rule.type === "footwear_preference" || rule.type === "footwear_requirement")) {
-    return `WearCheck doesn't re-check the generated image. Look at the shoes in the preview and judge whether they meet ${quote}; it shows appearance, not grip or comfort on the ground.`;
+    return `Generation alone doesn't verify the requirement. Look at the shoes in the preview and judge whether they meet ${quote}; it shows appearance, not grip or comfort on the ground.`;
   }
-  if (quote) return `WearCheck doesn't re-check the generated image against ${quote}. Judge for yourself whether the preview meets it.`;
-  if (finding.kind === "practical") return "WearCheck doesn't re-check the generated image. It shows appearance only, not how the shoes behave on the ground.";
+  if (quote) return `Generation alone doesn't verify ${quote}. Judge for yourself whether the preview meets it.`;
+  if (finding.kind === "practical") return "Generation shows appearance only, not how the shoes behave on the ground.";
   return null;
 }
