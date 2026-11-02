@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { assertSameOrigin, handler, json, readJson } from "@/lib/api";
-import { currentAssessment, requireOwnedCheck, trackEvent } from "@/lib/checks";
+import { currentAssessment, latestObservation, requireOwnedCheck, trackEvent } from "@/lib/checks";
 import { db } from "@/lib/db";
 import { AppError } from "@/lib/errors";
 
@@ -21,8 +21,9 @@ export const POST = handler("decision", async (req: Request, ctx: { params: Prom
   let job: string | null = null;
   if (decision === "change") {
     if (!jobId) throw new AppError("NO_PREVIEW", "Choose a completed preview to use.", 400, true, "NONE");
-    const [j] = await db()`select id from wearcheck.render_jobs where id = ${jobId} and check_id = ${check.id} and assessment_id = ${assessment.id} and status = 'completed'`;
+    const [j] = await db()`select id, result_asset_id from wearcheck.render_jobs where id = ${jobId} and check_id = ${check.id} and assessment_id = ${assessment.id} and status = 'completed'`;
     if (!j) throw new AppError("STALE_PREVIEW", "That preview belongs to an older version of this check.", 409, true, "NONE");
+    if (!j.result_asset_id || !(await latestObservation(check.id, j.result_asset_id as string, check.requirements_revision))) throw new AppError("PREVIEW_NOT_CHECKED", "Check all requirements on the generated preview before saving this choice.", 409, true, "NONE");
     job = j.id as string;
   }
   await db()`update wearcheck.checks set decision = ${decision}, decision_render_job_id = ${job}, status = 'decided', current_step = 'decision', updated_at = now() where id = ${check.id}`;
