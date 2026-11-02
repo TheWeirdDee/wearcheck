@@ -231,9 +231,10 @@ export type CheckLine = { label: string; source: EvidenceSource; result: "ok" | 
 export type PhotoSupport = Record<RenderCategory, { ok: boolean; reason: string }>;
 
 /** The visible attributes used to rank alternatives — never gender or appearance. */
-export type ObservedOutfit = { garments: { category: string; colour: ColourFamily; description: string }[]; shoe_style: FootwearStyle | null };
+export type ObservedOutfit = { garments: { category: string; colour: ColourFamily; description: string }[]; shoe_style: FootwearStyle | null; shoe_colour?: ColourFamily };
 
 export type AssessmentResult = {
+  policy_version?: string;
   status: AssessmentStatus;
   headline: string;
   key_finding_id: string | null;
@@ -248,3 +249,5 @@ export type AssessmentResult = {
   photo_supports?: PhotoSupport;
   observed?: ObservedOutfit;
 };
+
+export const ASSESSMENT_POLICY_VERSION = "2026-11-02-release";
