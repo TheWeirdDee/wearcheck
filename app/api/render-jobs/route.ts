@@ -3,7 +3,6 @@ import { assertSameOrigin, handler, json, readJson } from "@/lib/api";
 import { currentAssessment, requireOwnedCheck } from "@/lib/checks";
 import { AppError } from "@/lib/errors";
 import { advanceJob, publicJob, requestRender } from "@/lib/jobs";
-import { clientIp, limit } from "@/lib/rate-limit";
 import { RenderJobRequest } from "@/lib/schemas";
 
 export const runtime = "nodejs";
@@ -19,7 +18,6 @@ export const POST = handler("render_create", async (req: Request) => {
   const assessment = await currentAssessment(check);
   if (!assessment) throw new AppError("STALE_ASSESSMENT", "Please review the latest assessment first.", 409, true, "EDIT_REQUIREMENTS");
   if (!body.itemId && !(body.userAssetId && body.userCategory)) throw new AppError("NO_ITEM", "Choose an item to preview.", 400, true, "CHOOSE_ANOTHER_ITEM");
-  await limit("renderSubmit", clientIp(req), "preview requests");
 
   const job = await requestRender({
     check,
