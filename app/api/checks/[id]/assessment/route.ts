@@ -37,14 +37,14 @@ export const POST = handler("assessment", async (req: Request, ctx: { params: Pr
   const photo = await photoAsset(check);
   if (!photo) throw new AppError("NO_PHOTO", "Please add your outfit photo first.", 409, true, "RETAKE_PHOTO");
 
-  let obs = await latestObservation(check.id, photo.id);
+  let obs = await latestObservation(check.id, photo.id, reqs.revision);
   if (!obs || body.reobserve) {
     await limit("vision", check.guest_session_id, "AI readings");
     await limit("visionGlobal", "global", "AI readings today");
     const { value: observation, model } = await observeOutfit(await getObject(photo.storage_key), reqs.json);
     const [row] = await db()`
-      insert into wearcheck.outfit_observations (check_id, photo_asset_id, json, model_id)
-      values (${check.id}, ${photo.id}, ${db().json(observation as never)}, ${model}) returning *`;
+      insert into wearcheck.outfit_observations (check_id, photo_asset_id, json, model_id, requirements_revision)
+      values (${check.id}, ${photo.id}, ${db().json(observation as never)}, ${model}, ${reqs.revision}) returning *`;
     obs = row as unknown as NonNullable<typeof obs>;
   }
   if (body.corrections) {
