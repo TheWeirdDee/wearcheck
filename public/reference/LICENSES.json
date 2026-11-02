@@ -134,5 +134,25 @@
       "productCoverOfHeight": 0.78,
       "problems": []
     }
+  },
+  "top-green-seersucker.jpg": {
+    "title": "File:Seersucker shirt.JPG",
+    "page": "https://commons.wikimedia.org/wiki/File:Seersucker_shirt.JPG",
+    "original": "https://upload.wikimedia.org/wikipedia/commons/0/0e/Seersucker_shirt.JPG?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+    "width": 1400,
+    "height": 1400,
+    "license": "CC BY-SA 3.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0",
+    "artist": "Peteski1",
+    "credit": "Own work",
+    "usageTerms": "Creative Commons Attribution-Share Alike 3.0",
+    "file": "top-green-seersucker.jpg",
+    "bytes": 211525,
+    "sha256": "49ed076a35a6bf3b502bcfa4722b75eb8275a8214c77540ab68c54e61acf758d",
+    "modifications": "Trimmed to the product, padded with the original background colour, resized and re-encoded as JPEG.",
+    "youcamCheck": {
+      "productCoverOfHeight": 0.67,
+      "problems": []
+    }
   }
 }
