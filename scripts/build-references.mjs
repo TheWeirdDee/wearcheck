@@ -14,6 +14,7 @@ const UA = { "User-Agent": "WearCheckAssetReview/0.2 (reference catalogue licenc
 mkdirSync(SRC, { recursive: true });
 
 const ITEMS = [
+  { file: "top-green-seersucker.jpg", title: "File:Seersucker shirt.JPG", aspect: 1, kind: "garment" },
   { file: "top-blue-shirt.jpg", title: "File:Blue Business Shirt.jpg", aspect: 1, kind: "garment" },
   { file: "dress-black-silk.jpg", title: "File:Black silk dress by Emma Knuckey.jpg", aspect: 3 / 4, kind: "garment" },
   { file: "loafer-black-tassel.jpg", title: "File:946 black.jpg", aspect: 4 / 3, kind: "shoe" },
@@ -26,7 +27,7 @@ const pages = Object.values((await (await fetch(api, { headers: UA })).json()).q
 const licences = existsSync(OUT + "LICENSES.json") ? JSON.parse(readFileSync(OUT + "LICENSES.json", "utf8")) : {};
 const strip = (h) => (h ?? "").replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
 
-for (const item of ITEMS) {
+for (const item of ITEMS.filter((item) => !process.argv.includes("--new-only") || !existsSync(OUT + item.file))) {
   const p = pages.find((x) => x.title === item.title);
   const info = p.imageinfo[0];
   const m = info.extmetadata;
