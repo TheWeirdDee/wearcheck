@@ -63,7 +63,7 @@ export async function loadDecision(check: CheckRow): Promise<DecisionData | null
     job = (j as unknown as JobRow) ?? null;
   }
   const result = assessment.findings_json;
-  const keyFinding = (job?.finding_id ? result.findings.find((f) => f.id === job!.finding_id) : null) ?? result.findings.find((f) => f.id === result.key_finding_id) ?? null;
+  const keyFinding = (job ? result.findings.find((f) => f.id === job.finding_id) : result.findings.find((f) => f.id === result.key_finding_id)) ?? null;
   const [card] = await db()`select created_at from wearcheck.decision_cards where check_id = ${check.id} order by created_at desc limit 1`;
   const recheck = job ? await previewRecheck(check.id, job.result_asset_id, keyFinding, reqs.json) : null;
   return {
