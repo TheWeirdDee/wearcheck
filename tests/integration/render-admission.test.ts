@@ -5,6 +5,8 @@
  * Opt-in:  INTEGRATION=1 npx vitest run tests/integration
  */
 import { randomBytes, randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { loadEnv } from "../../scripts/env.mjs";
 
@@ -67,6 +69,8 @@ describe.skipIf(!RUN)("render admission and submission (fixtures, no provider ca
   const clearJobs = async () => {
     await sql`delete from wearcheck.api_usage_events where render_job_id in (select id from wearcheck.render_jobs where check_id = ${fixture.checkId})`;
     await sql`delete from wearcheck.render_jobs where check_id = ${fixture.checkId}`;
+    const { hashForRateLimit } = await import("@/lib/session");
+    await sql`delete from wearcheck.rate_events where bucket = 'renderSubmit' and key_hash = ${hashForRateLimit(fixture.sessionId)}`;
   };
 
   it("two different simultaneous requests: exactly one is admitted and one provider task is created", async () => {
@@ -149,6 +153,15 @@ describe.skipIf(!RUN)("render admission and submission (fixtures, no provider ca
     expect(provider.createTask).not.toHaveBeenCalled();
   }, 60_000);
 
+  it("a concurrent requirements edit prevents admission before uploading or charging", async () => {
+    await clearJobs();
+    provider.createTask.mockReset();
+    await sql`update wearcheck.checks set requirements_revision = 2 where id = ${fixture.checkId}`;
+    try { await expect(request("loafer-black-tassel")).rejects.toMatchObject({ code: "STALE_ASSESSMENT" }); }
+    finally { await sql`update wearcheck.checks set requirements_revision = 1 where id = ${fixture.checkId}`; }
+    expect(provider.createTask).not.toHaveBeenCalled();
+  }, 60_000);
+
   it("parallel rate-limited requests can't exceed the limit", async () => {
     const { limit, LIMITS } = await import("@/lib/rate-limit");
     const key = `fixture-${randomUUID()}`;
@@ -156,5 +169,33 @@ describe.skipIf(!RUN)("render admission and submission (fixtures, no provider ca
     expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(LIMITS.renderSubmit.max);
     const { hashForRateLimit } = await import("@/lib/session");
     await sql`delete from wearcheck.rate_events where bucket = 'renderSubmit' and key_hash = ${hashForRateLimit(key)}`;
+  }, 60_000);
+
+  it("two distinct clothing selections send their exact reference bytes and matching provider IDs", async () => {
+    await clearJobs();
+    const { fromManual } = await import("@/lib/requirements");
+    const req = fromManual({ event_name: "Fixture", event_type: "work", dress_code: "", setting: "indoor", restrictions: "No red", event_date: "" });
+    await sql`update wearcheck.event_requirements set json = ${sql.json(req as never)} where check_id = ${fixture.checkId} and revision = 1`;
+    provider.uploadFile.mockClear();
+    provider.uploadFile.mockImplementation(async () => `fixture-file-${provider.uploadFile.mock.calls.length}`);
+    provider.createTask.mockReset().mockImplementation(async () => `fixture-task-${provider.createTask.mock.calls.length}`);
+    const hashes: string[] = [];
+    for (const itemId of ["top-blue-shirt", "top-green-seersucker"]) {
+      const job = await jobs.requestRender({ check: fixture.check, assessment: fixture.assessment, findingId: "voluntary:upper_body", reference: { kind: "catalogue", itemId }, explicitRetry: false });
+      expect(job.status).toBe("submitted");
+      const calls = provider.uploadFile.mock.calls as unknown as [Buffer, string, string][];
+      const sent = calls.at(-1)![0];
+      const bytes = readFileSync(`public/reference/${itemId}.jpg`);
+      expect(sent.equals(bytes)).toBe(true);
+      const [row] = await sql`select input_provenance from wearcheck.render_jobs where id = ${job.id}`;
+      const p = row.input_provenance;
+      const digest = createHash("sha256").update(bytes).digest("hex");
+      expect(p).toMatchObject({ catalogueItemId: itemId, referenceSha256: digest, category: "upper_body", feature: "cloth-v4" });
+      expect(provider.createTask.mock.calls.at(-1)?.[0]).toEqual({ feature: "cloth-v4", srcFileId: p.srcFileId, refFileId: p.refFileId, garmentCategory: "upper_body" });
+      hashes.push(digest);
+      await sql`update wearcheck.render_jobs set status = 'failed' where id = ${job.id}`;
+    }
+    expect(new Set(hashes).size).toBe(2);
+    expect(provider.createTask).toHaveBeenCalledTimes(2);
   }, 60_000);
 });
