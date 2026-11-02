@@ -10,3 +10,6 @@ coverage/
 .env.*
 *.log
 *.tsbuildinfo
+scripts/demo-edit.mjs
+scripts/demo-record.mjs
+scripts/demo-scenes.json
