@@ -15,6 +15,8 @@ export default defineConfig({
   reporter: process.env.E2E_JSON_OUTPUT ? [["list"], ["json", { outputFile: process.env.E2E_JSON_OUTPUT }]] : [["list"]],
   use: {
     baseURL: process.env.E2E_BASE_URL ?? "http://localhost:3000",
+    actionTimeout: 20_000,
+    navigationTimeout: 60_000,
     storageState: process.env.E2E_STORAGE_STATE || undefined,
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
