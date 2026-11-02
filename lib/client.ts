@@ -1,6 +1,6 @@
 "use client";
 
-export type ApiErrorBody = { code: string; message: string; retryable: boolean; action: string };
+export type ApiErrorBody = { code: string; message: string; retryable: boolean; action: string; retryAfter?: number };
 
 export class ClientApiError extends Error {
   constructor(public status: number, public body: ApiErrorBody) {
