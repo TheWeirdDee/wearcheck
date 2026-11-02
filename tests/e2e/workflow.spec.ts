@@ -4,6 +4,10 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import sharp from "sharp";
+import AxeBuilder from "@axe-core/playwright";
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { loadEnv } from "../../scripts/env.mjs";
 
 /**
  * End-to-end workflow against the real app. Steps that call the vision model or YouCam are
@@ -17,7 +21,7 @@ const PHOTO = process.env.E2E_PHOTO ?? "";
 const INVITATION = "tests/fixtures/sample-invitation.png";
 const LIVE_OK = LIVE && existsSync(PHOTO);
 const RENDER = LIVE_OK && process.env.E2E_RENDER === "1";
-const RESULT_LABELS = /AI re-read of the preview: (the requirement appears to be met|still unresolved|couldn't tell — treat as unresolved)/;
+const RESULT_LABELS = /AI re-read of the preview: (confirmed requirements appear to be met|still unresolved|couldn't tell — treat as unresolved)/;
 
 async function startCheck(page: Page) {
   await page.goto("/check/new");
@@ -88,7 +92,7 @@ test.describe("guest workflow (no provider calls)", () => {
     const id = await startCheck(page);
     await page.reload();
     await expect(page.getByRole("heading", { name: "What’s the occasion?" })).toBeVisible();
-    const other = await browser.newContext();
+    const other = await browser.newContext({ storageState: { cookies: [], origins: [] } });
     const p2 = await other.newPage();
     await p2.goto(`/check/${id}/invitation`);
     await expect(p2.getByRole("heading", { name: "We can’t open this check" })).toBeVisible();
@@ -123,6 +127,44 @@ test.describe("guest workflow (no provider calls)", () => {
 test.describe("live assessments @live", () => {
   test.skip(!LIVE_OK, "Set E2E_LIVE=1 and E2E_PHOTO to a permissioned full-length photo");
   test.setTimeout(5 * 60_000);
+
+  test("uploaded references reject white stripes, wrong categories and stale requirement validation without a paid render", async ({ page, isMobile }) => {
+    test.skip(isMobile, "Vision admission is tested once to bound reading quota");
+    const id = await manualCheck(page, { occasion: "work", dress: "", setting: "indoor", restrictions: "No white" });
+    const origin = new URL(page.url()).origin;
+    async function upload(file: string) {
+      return page.request.post(`/api/checks/${id}/reference`, { headers: { origin }, multipart: { category: "upper_body", rights: "accepted", file: { name: "reference.jpg", mimeType: "image/jpeg", buffer: readFileSync(file) } }, timeout: 90_000 });
+    }
+    try {
+      const striped = await upload("public/reference/top-green-seersucker.jpg");
+      expect(striped.status()).toBe(422);
+      expect((await striped.json()).error.code).toBe("REFERENCE_NOT_SUITABLE");
+      const wrongCategory = await upload("public/reference/oxford-tan-captoe.jpg");
+      expect(wrongCategory.status()).toBe(422);
+      expect((await wrongCategory.json()).error.code).toBe("REFERENCE_NOT_SUITABLE");
+      const good = await upload("public/reference/top-blue-shirt.jpg");
+      expect(good.status()).toBe(200);
+      const ref = await good.json();
+      await page.goto(`/check/${id}/requirements`);
+      const rule = page.locator("li").filter({ has: page.getByText("No white", { exact: true }) }).last();
+      await rule.getByRole("button", { name: "Edit", exact: true }).click();
+      await rule.getByRole("textbox", { name: "Requirement text" }).fill("No blue");
+      await rule.getByRole("group", { name: "Colours", exact: true }).getByRole("button", { name: "white", exact: true }).click();
+      await rule.getByRole("group", { name: "Colours", exact: true }).getByRole("button", { name: "blue", exact: true }).click();
+      await rule.getByRole("button", { name: "Done", exact: true }).click();
+      await page.getByRole("button", { name: "These details are correct" }).click();
+      await page.waitForURL(/\/outfit$/);
+      await page.goto(`/check/${id}/assessment`);
+      await expect(page.getByRole("heading", { name: "Breakdown" })).toBeVisible({ timeout: 150_000 });
+      const stale = await page.request.post("/api/render-jobs", { headers: { origin }, data: { checkId: id, findingId: "voluntary:upper_body", userAssetId: ref.assetId, userCategory: "upper_body" } });
+      expect(stale.status()).toBe(422);
+      expect((await stale.json()).error.code).toBe("REFERENCE_NOT_SUITABLE");
+      await page.goto(`/check/${id}/preview`);
+      await expect(page.getByRole("heading", { name: "No preview yet" })).toBeVisible();
+    } finally {
+      expect((await page.request.delete(`/api/checks/${id}`, { headers: { origin } })).status()).toBe(200);
+    }
+  });
 
   test("cropped photo + zero requirements: no verdict, unseen shoes not passed, a full-length photo requested", async ({ page }) => {
     const cropped = path.join(mkdtempSync(path.join(tmpdir(), "wc-crop-")), "cropped.jpg");
@@ -191,7 +233,7 @@ test.describe("live assessments @live", () => {
     test.skip(isMobile, "logic is viewport-independent; run once");
     const lists: string[][] = [];
     for (const restrictions of ["Flats or wedges recommended", "Heels or wedges required"]) {
-      const ctx = await browser.newContext();
+      const ctx = await browser.newContext({ storageState: { cookies: [], origins: [] } });
       const p = await ctx.newPage();
       const id = await manualCheck(p, { dress: "Formal", setting: "indoor", restrictions });
       await p.goto(`/check/${id}/options?explore=1&category=shoes`);
@@ -277,7 +319,7 @@ async function renderJourney(page: Page, browser: Browser, context: BrowserConte
   await expect(outcome).toContainText("Not re-checked — treat as unresolved");
   let state = "Not re-checked — treat as unresolved";
   if (o.recheck) {
-    await outcome.getByRole("button", { name: "Check the preview against the rule" }).click();
+    await outcome.getByRole("button", { name: "Check all requirements" }).click();
     await expect(outcome.getByRole("status")).toHaveText(RESULT_LABELS, { timeout: 120_000 });
     state = (await outcome.getByRole("status").innerText()).trim();
   }
@@ -312,11 +354,11 @@ async function renderJourney(page: Page, browser: Browser, context: BrowserConte
   await page.waitForURL(/\/decision$/);
   await expect(page.getByText("Does the preview meet it?")).toBeVisible();
   await expect(page.getByText(state.startsWith("AI re-read") ? state : "Not re-checked — treat as unresolved until you've checked the preview")).toBeVisible();
-  if (!/appears to be met/.test(state)) await expect(page.getByRole("heading", { name: /unresolved/ })).toBeVisible();
+  if (!/requirements appear to be met/.test(state)) await expect(page.getByRole("heading", { name: /unresolved/ })).toBeVisible();
   await downloadAndOpenCard(page, context);
 
   // Ownership isolation: another browser can't fetch the render.
-  const other = await browser.newContext();
+  const other = await browser.newContext({ storageState: { cookies: [], origins: [] } });
   expect((await other.request.get(new URL(previewHref!, page.url()).toString())).status()).toBe(404);
   await other.close();
 
@@ -331,6 +373,81 @@ test.describe("live YouCam renders @live @render", () => {
   test.skip(!RENDER, "Paid renders: set E2E_LIVE=1 E2E_RENDER=1 and E2E_PHOTO");
   test.setTimeout(12 * 60_000);
 
+  test("two distinct clothing references on the same check reach Clothes V4 and remain distinct after refresh @pair", async ({ page, context, isMobile }) => {
+    test.skip(isMobile || process.env.E2E_RELEASE_PAIR !== "1", "Explicit opt-in: two paid clothing tasks, once on desktop");
+    const id = await manualCheck(page, { occasion: "work", dress: "", setting: "indoor", restrictions: "No red" });
+    const options = `/check/${id}/options?explore=1&category=upper_body`;
+    const jobIds: string[] = [];
+    const resultDigests: string[] = [];
+    const evidence: unknown[] = [];
+    loadEnv();
+    const postgres = (await import("postgres")).default;
+    const sql = postgres(process.env.SUPABASE_DB_URL!, { max: 1, prepare: false });
+    try {
+      await page.goto(options);
+      await expect(page.getByTestId("catalogue").locator("h3")).toHaveCount(2);
+      const first = page.getByTestId("catalogue").locator("li", { has: page.getByRole("heading", { name: "Blue cotton button-down shirt" }) }).first();
+      await first.getByRole("button", { name: "Not this item" }).click();
+      await page.reload();
+      await expect(page.getByTestId("catalogue").locator("h3")).toHaveCount(1);
+      await expect(page.getByTestId("catalogue")).not.toContainText("Blue cotton");
+      await page.getByRole("button", { name: "Restore references I rejected" }).click();
+      for (const [index, itemId] of ["top-blue-shirt", "top-green-seersucker"].entries()) {
+        await page.goto(options);
+        const title = index === 0 ? "Blue cotton button-down shirt" : "Green and white striped seersucker shirt";
+        const card = page.getByTestId("catalogue").locator(":scope > li", { has: page.getByRole("heading", { name: title }) });
+        await card.getByRole("button", { name: "Select this item" }).click();
+        await page.reload();
+        await expect(page.getByTestId("generation-review")).toContainText(title);
+        for (const width of [320, 375, 390, 768, 1280]) {
+          await page.setViewportSize({ width, height: 900 });
+          expect(await noHorizontalScroll(page)).toBeLessThanOrEqual(0);
+          await expect(page.getByTestId("selection-bar")).toContainText(title);
+          await page.screenshot({ path: test.info().outputPath(`shirt-${index}-selection-${width}.png`), fullPage: true });
+        }
+        const axe = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]).analyze();
+        expect(axe.violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => v.id)).toEqual([]);
+        await page.getByTestId("selection-bar").getByRole("button", { name: "Generate preview" }).click();
+        await page.waitForURL(/\/preview\?job=/, { timeout: 90_000 });
+        const jobId = new URL(page.url()).searchParams.get("job")!;
+        jobIds.push(jobId);
+        await page.reload();
+        await expect(page.getByRole("heading", { name: "Your AI preview" })).toBeVisible({ timeout: 360_000 });
+        const job = (await (await page.request.get(`/api/render-jobs/${jobId}`)).json()).job;
+        const output = await page.request.get(job.resultUrl);
+        expect(output.status()).toBe(200);
+        const outputBytes = await output.body();
+        expect((await sharp(outputBytes).metadata()).width).toBeGreaterThan(500);
+        resultDigests.push(createHash("sha256").update(outputBytes).digest("hex"));
+        const [record] = await sql`select j.provider_task_id, j.input_provenance, a.sha256 as source_sha256 from wearcheck.render_jobs j join wearcheck.media_assets a on a.id = j.source_asset_id where j.id = ${jobId} and j.check_id = ${id}`;
+        expect(record.provider_task_id).toBeTruthy();
+        expect(record.input_provenance).toMatchObject({ catalogueItemId: itemId, feature: "cloth-v4", category: "upper_body", sourceSha256: record.source_sha256, referenceSha256: createHash("sha256").update(readFileSync(`public/reference/${itemId}.jpg`)).digest("hex") });
+        evidence.push({ jobId, ...record });
+        await expect(page.getByRole("button", { name: "Use this look" })).toBeDisabled();
+        await page.getByRole("button", { name: "Check all requirements" }).click();
+        await expect(page.getByTestId("preview-outcome").getByRole("status")).toHaveText(RESULT_LABELS, { timeout: 120_000 });
+        await expect(page.getByRole("list", { name: "Generated outfit requirements" })).toContainText("No red");
+        await page.screenshot({ path: test.info().outputPath(`shirt-${index}-generated.png`), fullPage: true });
+        await page.getByRole("link", { name: "Try another item" }).click();
+        await expect(page.getByTestId("catalogue-note")).toBeVisible();
+        await expect(page.getByTestId("catalogue").locator("h3")).toHaveCount(index === 0 ? 1 : 0);
+      }
+      expect(new Set(jobIds).size).toBe(2);
+      expect(new Set(resultDigests).size).toBe(2);
+      await page.reload();
+      await expect(page.getByTestId("catalogue-note")).toContainText("No different eligible reference remains");
+      const restored = await context.newPage();
+      await restored.goto(options);
+      await expect(restored.getByTestId("catalogue")).toHaveCount(0);
+      await restored.close();
+      await test.info().attach("actual-provider-provenance.json", { body: JSON.stringify(evidence, null, 2), contentType: "application/json" });
+    } finally {
+      await sql.end();
+      const deleted = await page.request.delete(`/api/checks/${id}`, { headers: { origin: new URL(page.url()).origin } });
+      expect(deleted.status()).toBe(200);
+    }
+  });
+
   test("garment (Clothes V4): “No white” → ranked blue shirt → render → refresh → comparison → AI recheck → card → isolation → delete", async ({ page, browser, context, isMobile }) => {
     test.skip(isMobile, "run once, on desktop, to bound credit use (mobile layout is checked inside)");
     await renderJourney(page, browser, context, { restrictions: "Please avoid white or ivory", item: /Blue cotton/i, recheck: true });
@@ -339,6 +456,6 @@ test.describe("live YouCam renders @live @render", () => {
   test("shoes (Shoes V3) with a user-uploaded reference: “heels or wedges required” → own photo of a wedge → render → card → delete", async ({ page, browser, context, isMobile }) => {
     test.skip(isMobile, "run once, on desktop, to bound credit use (mobile layout is checked inside)");
     // Deterministic for flat shoes, loafers or boots: none is a heel or a wedge.
-    await renderJourney(page, browser, context, { restrictions: "Heels or wedges required", upload: "public/reference/wedge-black-sandal.jpg", recheck: false });
+    await renderJourney(page, browser, context, { restrictions: "Heels or wedges required", upload: "public/reference/wedge-black-sandal.jpg", recheck: true });
   });
 });
