@@ -16,6 +16,11 @@ const req = (restrictions: string, over: Partial<Parameters<typeof fromManual>[0
   fromManual({ event_name: "", event_type: "wedding", dress_code: "Formal", setting: "indoor", restrictions, event_date: "", ...over });
 
 describe("alternatives depend on the person's inputs, not a fixed category-first pick", () => {
+  it("optional browsing also withholds garments whose confirmed coverage requirement cannot be verified", () => {
+    const r = req("Traditional modest attire required");
+    expect(rankOptions({ render_category: "upper_body", rule_id: null }, r)).toEqual([]);
+    expect(rankOptions({ render_category: "full_body", rule_id: null }, r)).toEqual([]);
+  });
   it("two people with different footwear requirements get different shoe choices", () => {
     const flats = req("Flats or wedges recommended", { setting: "outdoor" });
     const heels = req("Heels or wedges required");
