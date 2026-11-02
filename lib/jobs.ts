@@ -79,7 +79,7 @@ export async function requestRender(r: RenderRequest): Promise<JobRow> {
       throw new AppError("ITEM_NOT_ELIGIBLE", "That reference doesn't meet your confirmed requirements. Please choose another item or upload your own.", 400, false, "CHOOSE_ANOTHER_ITEM");
     }
   } else {
-    const rows = await db()`select id from wearcheck.media_assets where id = ${r.reference.assetId} and check_id = ${r.check.id} and kind = 'reference_upload'`;
+    const rows = await db()`select id from wearcheck.media_assets where id = ${r.reference.assetId} and check_id = ${r.check.id} and kind = 'reference_upload' and origin = ${`user_reference:${r.reference.category}`}`;
     if (!rows[0]) throw new AppError("UNKNOWN_ITEM", "We couldn't find your uploaded item.", 400, false, "CHOOSE_ANOTHER_ITEM");
     category = r.reference.category;
     refKey = `user:${r.reference.assetId}`;
@@ -90,7 +90,7 @@ export async function requestRender(r: RenderRequest): Promise<JobRow> {
     throw new AppError("CATEGORY_MISMATCH", "That item doesn't address this finding. Please choose an item of the matching type.", 400, false, "CHOOSE_ANOTHER_ITEM");
   }
   const support = r.assessment.findings_json.photo_supports?.[category];
-  if (support && !support.ok) throw new AppError("PHOTO_UNSUPPORTED", `This photo can't be used for that change: ${support.reason}`, 422, true, "RETAKE_PHOTO");
+  if (!support?.ok) throw new AppError("PHOTO_UNSUPPORTED", `This photo can't be used for that change: ${support?.reason ?? "Re-read your photo on the assessment first."}`, 422, true, "RETAKE_PHOTO");
   if (category === "shoes" && !r.assessment.findings_json.shoes_assessable) {
     throw new AppError("PHOTO_FEET_NOT_VISIBLE", "We need to see your shoes for a shoe preview.", 422, true, "RETAKE_PHOTO");
   }
