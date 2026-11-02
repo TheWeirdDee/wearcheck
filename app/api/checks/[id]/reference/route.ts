@@ -19,7 +19,7 @@ export const POST = handler("reference_upload", async (req: Request, ctx: { para
   if (form.get("rights") !== "accepted") throw new AppError("RIGHTS_REQUIRED", "Please confirm you're allowed to use this image.", 400, true, "NONE");
   // The photo must support this change (e.g. shoes need visible feet), checked here as well as in the UI.
   const support = (await currentAssessment(check))?.findings_json.photo_supports?.[category.data];
-  if (support && !support.ok) throw new AppError("PHOTO_UNSUPPORTED", `This photo can't be used for that change: ${support.reason}`, 422, true, "RETAKE_PHOTO");
+  if (!support?.ok) throw new AppError("PHOTO_UNSUPPORTED", `This photo can't be used for that change: ${support?.reason ?? "Re-read your photo on the assessment first."}`, 422, true, "RETAKE_PHOTO");
   const img = await normalizeImage(bytes, "reference_upload");
   const asset = await saveAsset(check.id, "reference_upload", img, `user_reference:${category.data}`);
   return json({ assetId: asset.id, category: category.data, url: `/api/media/${asset.id}` });
