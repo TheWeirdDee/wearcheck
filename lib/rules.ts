@@ -14,6 +14,7 @@ import {
   type Rule,
   type UserCorrections,
   COLOUR_LABEL,
+  ASSESSMENT_POLICY_VERSION,
   FOOTWEAR_LABEL,
 } from "./schemas";
 
@@ -362,6 +363,7 @@ export function assess(
   };
   if (!providerReady) for (const category of Object.keys(supports) as RenderCategory[]) supports[category] = { ok: false, reason: providerReason };
   const observed: ObservedOutfit = {
+    shoe_colour: shoesItem?.colour_family,
     garments: garments.map((g) => ({ category: g.item.category, colour: colourOf(g).colour, description: g.item.description })),
     shoe_style: shoesAssessable ? style : null,
   };
@@ -426,6 +428,7 @@ function finalize(findings: Finding[], clarification: Clarification | null, avai
             : anyChecked || clarification ? "Not enough information" : "We couldn't check your requirements from this photo";
 
   return {
+    policy_version: ASSESSMENT_POLICY_VERSION,
     status,
     headline,
     key_finding_id: key?.id ?? null,
@@ -445,7 +448,7 @@ function finalize(findings: Finding[], clarification: Clarification | null, avai
 export type RecheckState = "appears_resolved" | "still_conflicts" | "unclear";
 
 export const RECHECK_LABEL: Record<RecheckState | "none", string> = {
-  appears_resolved: "AI re-read of the preview: the requirement appears to be met",
+  appears_resolved: "AI re-read of the preview: confirmed requirements appear to be met",
   still_conflicts: "AI re-read of the preview: still unresolved",
   unclear: "AI re-read of the preview: couldn't tell — treat as unresolved",
   none: "Not re-checked — treat as unresolved until you've checked the preview",
@@ -455,12 +458,19 @@ export const RECHECK_LABEL: Record<RecheckState | "none", string> = {
  * Compares the finding a preview was made for with an assessment of the *generated image*.
  * Only the same requirement counts: a successful render is never treated as a resolved rule.
  */
-export function recheckOutcome(original: Pick<Finding, "rule_id" | "area" | "render_category">, after: AssessmentResult): { state: RecheckState; note: string } {
+export function recheckOutcome(original: Pick<Finding, "rule_id" | "area" | "render_category"> | null, after: AssessmentResult): { state: RecheckState; note: string; checks: NonNullable<AssessmentResult["checks"]> } {
+  const checks = after.checks ?? [];
+  const remaining = after.findings.filter((f) => f.status === "conflict" || f.status === "consider_change");
+  if (remaining.length) return { state: "still_conflicts", note: remaining.map((f) => `${f.observation} ${f.reason}`).join(" "), checks };
+  if (after.status !== "compatible" || checks.some((c) => c.result !== "ok")) {
+    return { state: "unclear", note: after.photo_request ?? (after.status === "no_requirements" ? "No specific requirements were supplied, so suitability was not assessed." : "Some confirmed requirements could not be checked. Treat the outfit as unresolved."), checks };
+  }
+  if (!original) return { state: "appears_resolved", note: "All confirmed requirements were rechecked on the generated image; no remaining issue was found. Inspect the whole preview yourself too.", checks };
   const same = after.findings.filter((f) => (original.rule_id ? f.rule_id === original.rule_id : f.area === original.area && f.rule_id === null));
   const bad = same.find((f) => f.status === "conflict" || f.status === "consider_change");
-  if (bad) return { state: "still_conflicts", note: bad.observation };
+  if (bad) return { state: "still_conflicts", note: bad.observation, checks };
   const visible = original.render_category === "shoes" ? after.shoes_assessable : after.photo_supports?.full_body.ok === true;
-  if (visible && same.length && same.every((f) => f.status === "ok")) return { state: "appears_resolved", note: same[0].observation };
-  if (visible && !original.rule_id && same.length === 0 && after.status === "compatible") return { state: "appears_resolved", note: "No practical concern was found in the preview." };
-  return { state: "unclear", note: same.find((f) => f.status === "cant_assess")?.observation ?? "The preview couldn't be read clearly enough to tell." };
+  if (visible && same.length && same.every((f) => f.status === "ok")) return { state: "appears_resolved", note: "All confirmed requirements were rechecked. " + same[0].observation, checks };
+  if (visible && !original.rule_id && same.length === 0 && after.status === "compatible") return { state: "appears_resolved", note: "No remaining concern was found in the preview.", checks };
+  return { state: "unclear", note: same.find((f) => f.status === "cant_assess")?.observation ?? "The preview couldn't be read clearly enough to tell.", checks };
 }
