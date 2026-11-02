@@ -1,0 +1,12 @@
+.git/
+.next/
+node_modules/
+private-assets/
+private-ops/
+test-results/
+playwright-report/
+coverage/
+.env
+.env.*
+*.log
+*.tsbuildinfo
