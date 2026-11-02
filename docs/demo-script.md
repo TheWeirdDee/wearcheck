@@ -1,23 +1,32 @@
-# WearCheck — three-minute demo: script and shot list
+﻿# WearCheck — final three-minute demo
 
-**Status:** recorded and edited, **not uploaded**. File: `private-ops/video/wearcheck-demo-180s.mp4` (git-ignored), exactly 180.00 s, 1920×1080 H.264 + AAC, burned-in captions, synthesised voiceover (Windows SAPI "Zira"). It replaces the earlier 120-second video.
+Recorded from https://wearcheck.vercel.app on 2 November 2026, application commit `f1b68730e778740672f70141e304cf70d781bf09`. The video is private and local; it has not been publicly uploaded or submitted to Devpost.
 
-- **Footage:** the deployed app at https://wearcheck.vercel.app on 2026-11-01, recorded with `scripts/demo-record.mjs` (Playwright, 1280×720 desktop and 390×844 mobile). The main take ran at 16:58 UTC on commit `0088ef2`. The no-change check and the mobile clip come from a second take at 16:19 UTC on `3959959`: the main take's no-change step hit a local network drop, so it was not reused. Both takes are real runs, and the panel labels the second-session scenes.
-- **Photo:** the project owner, who authorised public use of their photos and previews in this demo. The invitation is the repository's sample, labelled on screen as created for the demo.
-- **Layout:** the app footage fills a 1536×864 area and nothing is drawn over it. Captions sit in the band below; titles, API badges, licence notes and wait disclosures sit in the right-hand panel.
-- **Editing:** `scripts/demo-edit.mjs` with the cut list and text in `scripts/demo-scenes.json`. Only provider waits are sped up, each with its real duration on screen. Other edits are cuts between real moments, flagged "Edited for time" in the panel. The editor first converts Playwright's variable-frame-rate WebM to constant 30 fps. The recording started about 20 s before the script's clock, so each source's offset was measured from scene changes (page loads, results appearing, the card opening) and applied to the marks.
+Final file: `private-ops/video/wearcheck-demo-180s.mp4` (git-ignored). Exactly 180.000 seconds, 1920×1080, 30 fps, H.264/AAC, burned-in captions and synthesised Windows SAPI narration. It replaces the previous demo.
 
-| Time | Scene | Shown (real app) | Voiceover (= captions) | Panel disclosure |
-|---|---|---|---|---|
-| 0:00–0:14 | Problem and outcome | Full-body comparison of the Clothes V4 result, the slider dragged, then "Zoom to the change" on the shirt | "You have an invitation and an outfit, but you're unsure whether they match. WearCheck checks the stated requirements and helps you preview the smallest change." | "Real YouCam Clothes V4 result from the run shown at 1:00" |
-| 0:14–0:39 | Invitation and confirmation | Sample invitation upload → Gemini reading → requirements with "From invitation" sources → "These details are correct" | Sample invitation; Gemini quotes each requirement; you confirm before anything is judged | "Sample invitation created for this demo — not a real event"; Gemini wait ×3.1 (actual 15.1 s) |
-| 0:39–0:59 | Outfit and finding | Photo + consent checkbox → "Your photo shows a white top." → Why? → exact text "Please avoid white or ivory" | The finding names the exact rule | "Photo: the project owner, shown with their permission"; Gemini wait ×1.8 (actual 9.6 s) |
-| 0:59–1:39 | First try-on (garment) | Options → blue shirt → Generate → real progress → full image, Original / AI preview / Compare, slider, zoom | Clothes V4 API; the shirt also replaced the vest and tie; WearCheck doesn't re-check the image | "YouCam Clothes V4 (cloth-v4)"; YouCam wait ×6.0 (actual 33.4 s, including uploads); reference licence |
-| 1:39–2:09 | Second try-on (shoes) | "Also worth a look": "Your shoes don't appear to be flats or wedges." → tan oxford → Generate → full image (shoes in view) → zoom on the shoes | Shoes V3 API | "YouCam Shoes V3 (shoes-transfer)"; YouCam wait ×6.2 (actual 23.8 s); reference licence |
-| 2:09–2:29 | Decision and card | "Use this look" on the shirt → decision page → "Download decision card" → the downloaded PNG opened at fit size, then 100% and scrolled | Original and preview, the requirement, the recommendation | "Downloaded file opened: wearcheck-decision-card.png" |
-| 2:29–2:45 | No change | A separate check (typed details: smart-casual dinner, no restrictions) → photo → "No specific requirements to check against" → "Save my outfit check" → "Keep your outfit." | No render at all; keeping what you own is a successful outcome | "Separate check · no render"; Gemini wait ×2.9 (actual 8.6 s); "Recorded in a second session, 16:19 UTC" |
-| 2:45–3:00 | Mobile and close | 390×844 viewport, same live check: Original / AI preview / Compare, slider, zoom | Previews illustrate appearance, not fit or organiser approval; WearCheck — wearcheck.vercel.app | "Mobile viewport 390 × 844"; name and URL |
+The owner explicitly authorised the photo and generated previews for this demo. No private photograph or recording is included in Git. The invitation is a labelled sample. References are licensed example images, not stock or personalised shopping recommendations.
 
-**What the video does not claim:** that the preview proves fit, that the organiser approves, or that WearCheck re-checked the generated image. The decision card itself says the preview has not been re-checked against the rule.
+| Time | Real recorded behavior |
+|---|---|
+| 0:00–0:10 | Concrete problem: a white shirt and a no-white invitation; original/preview comparison |
+| 0:10–0:32 | Invitation upload, Gemini extraction, quoted requirements, confirmation |
+| 0:32–0:54 | Full-length photo and consent, white-shirt finding, exact rule and checked breakdown |
+| 0:54–1:42 | Blue-shirt reference and reasons, large original/reference review, Clothes V4 generation, full-photo comparison, close-up and explicit preview recheck |
+| 1:42–2:12 | Footwear finding, user-reference upload of licensed oxford shoes, Shoes V3 generation, full-photo comparison and shoe close-up |
+| 2:12–2:32 | Choose clothing preview, decision, download and open the actual decision-card PNG |
+| 2:32–2:47 | Different event requirements on the same check: formal/no trainers/avoid red; checked compatible result, keep original without rendering |
+| 2:47–3:00 | Mobile comparison, changed-area zoom, limitations and URL |
 
-**To re-record:** run `node scripts/demo-record.mjs https://wearcheck.vercel.app <photo>` (4 YouCam units, and 3 Gemini readings). Then measure each source's offset (scene-change times against marks), write a sources file like `private-ops/video/final-sources.json`, and run `node scripts/demo-edit.mjs <sources.json> <ffmpeg.exe> scripts/demo-scenes.json`. Re-check that the voiceover matches what the run actually found. WearCheck's own limits (20 new checks and 6 preview requests per hour per IP) apply to recordings too.
+Gemini extracts information; WearCheck evaluates confirmed requirements and selects eligible references; YouCam generates the try-on. Clothes V4 redraws clothing from a reference; Shoes V3 redraws footwear. Generation alone does not establish that a rule was resolved.
+
+The clothing output replaces the white shirt, vest and tie with a blue shirt. Visual inspection found no remaining white garment; the separate AI recheck reported that the requirement appeared met. Other layers changed too, a disclosed limitation. The shoe output replaces black shoes with tan oxfords as a separate operation on the original photo, not a combined clothing-and-shoes result. Uploaded references are not automatically verified for category or suitability.
+
+Only provider waits are sped up, with actual elapsed waits and speed factors disclosed. Other edits are labelled cuts between real moments. Generation times were 19 seconds for clothing and 39 seconds for shoes; displayed wait measurements also include upload/submission overhead.
+
+The complete export played at normal speed through its 180-second end. Ninety frames spanning the playback, full-size shirt/shoe close-ups and captions were inspected. FFmpeg and Chromium both decoded all 5,400 frames; audio decoded successfully and peaked at −5.7 dB without clipping.
+
+File size: 21,176,551 bytes. SHA-256: `116337913a74f7c7945a167baee38e79f41cca862e8aa098825aa8386bf093ca`.
+
+Private evidence: `private-ops/final-video/`. Finding-by-finding report: `private-ops/final-verification.md`. Total provider use for this pass was five generations / ten units, including one generation before a private recording-helper failure. The helper was corrected and the cap was respected. The final demo check was deleted through the app.
+
+The three pre-existing uncommitted demo-script edits were preserved. Private copies supplied the final recording and timed narration; private operational files remain outside Git.
