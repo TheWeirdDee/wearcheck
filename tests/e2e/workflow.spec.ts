@@ -427,6 +427,21 @@ test.describe("live YouCam renders @live @render", () => {
         await page.getByRole("button", { name: "Check all requirements" }).click();
         await expect(page.getByTestId("preview-outcome").getByRole("status")).toHaveText(RESULT_LABELS, { timeout: 120_000 });
         await expect(page.getByRole("list", { name: "Generated outfit requirements" })).toContainText("No red");
+        for (const width of [320, 375, 390, 768, 1280]) {
+          await page.setViewportSize({ width, height: 900 });
+          const frame = page.getByTestId("compare-frame");
+          await frame.evaluate((el) => el.scrollIntoView({ block: "center" }));
+          const bounds = await frame.boundingBox();
+          expect(bounds!.y).toBeGreaterThanOrEqual(0);
+          expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(901);
+          expect(await noHorizontalScroll(page)).toBeLessThanOrEqual(0);
+          const view = page.getByRole("group", { name: "Comparison view" });
+          await view.getByRole("button", { name: "Original", exact: true }).click();
+          await expect(view.getByRole("button", { name: "Original", exact: true })).toHaveAttribute("aria-pressed", "true");
+          await view.getByRole("button", { name: "AI preview", exact: true }).click();
+          await expect(frame.locator('img[alt^="AI-generated preview"]')).toBeVisible();
+          await page.screenshot({ path: test.info().outputPath(`shirt-${index}-comparison-${width}.png`), fullPage: true });
+        }
         await page.screenshot({ path: test.info().outputPath(`shirt-${index}-generated.png`), fullPage: true });
         await page.getByRole("link", { name: "Try another item" }).click();
         await expect(page.getByTestId("catalogue-note")).toBeVisible();
