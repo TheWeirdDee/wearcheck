@@ -1,4 +1,5 @@
 import { COLOUR_LABEL, FOOTWEAR_LABEL, RenderCategory, type ColourFamily, type FootwearStyle, type ObservedOutfit, type Requirements, type Finding, type Rule } from "./schemas";
+import fingerprints from "../public/reference/fingerprints.json";
 
 /**
  * Curated, licence-documented reference items (PRD §9). Files live in /public/reference with
@@ -183,6 +184,18 @@ export const CATALOGUE: CatalogueItem[] = [
     modifications: "Trimmed to the dress, padded with the original white background, resized.",
     is_purchasable: false, sku: null, enabled: true,
   },
+  {
+    id: "top-green-seersucker", title: "Green and white striped seersucker shirt",
+    category: "upper_body", file: "top-green-seersucker.jpg", width: 1400, height: 1400,
+    colours: ["green", "white"], footwear_style: null,
+    covers: ["shoulders", "upper_arms", "chest"],
+    kinds: ["shirt", "top", "collared", "short sleeve", "button-down"],
+    tags: ["Short sleeves", "Green and white stripes"], formality_tags: ["smart", "casual"], terrain_tags: [],
+    source_name: "Wikimedia Commons", source_url: "https://commons.wikimedia.org/wiki/File:Seersucker_shirt.JPG",
+    creator: "Peteski1", licence: "CC BY-SA 3.0", licence_url: "https://creativecommons.org/licenses/by-sa/3.0/",
+    modifications: "Trimmed to the shirt, padded with the original background colour, resized and re-encoded as JPEG.",
+    is_purchasable: false, sku: null, enabled: true,
+  },
 ];
 
 export function catalogueItem(id: string) {
@@ -220,6 +233,10 @@ const COVERAGE_WORDS: [RegExp, Coverage[]][] = [
 export function meetsRule(item: CatalogueItem, r: Rule): boolean | "unknown" {
   const t = `${r.evidence_text ?? ""} ${r.summary}`.toLowerCase();
   if (item.category === "shoes") return r.type === "coverage" || r.type === "garment_exclusion" || r.type === "garment_requirement" ? true : "unknown";
+  // Sleeve exclusions are exclusions, not requests to cover the arms.
+  if (/\b(no|not|avoid|without|prohibited|banned)\b/.test(t) && /\b(long|short) sleeves?\b/.test(t)) {
+    return !item.kinds.some((k) => (k === "long sleeve" && /long sleeves?/.test(t)) || (k === "short sleeve" && /short sleeves?/.test(t)));
+  }
   if (r.type === "coverage" || /\b(cover|covered|modest|sleeves?|shoulders?|knees?)\b/.test(t)) {
     const needed = COVERAGE_WORDS.filter(([re]) => re.test(t)).flatMap(([, c]) => c);
     if (!needed.length) return "unknown";
@@ -242,8 +259,13 @@ export function optionsFor(finding: Pick<Finding, "render_category" | "rule_id">
   const excluded = new Set(req.rules.filter((r) => r.type === "colour_exclusion").flatMap((r) => r.colours));
   const rule = finding.rule_id ? req.rules.find((r) => r.id === finding.rule_id) : null;
   const garmentRules = req.rules.filter((r) => ["garment_exclusion", "garment_requirement", "coverage", "other"].includes(r.type));
+  const code = req.dress_code && !req.dress_code.ambiguous ? req.dress_code.value.toLowerCase() : "";
+  const formality = FORMALITY_FOR.find(([re]) => re.test(code))?.[1];
   return CATALOGUE.filter((c) => c.enabled && c.category === finding.render_category)
+    .filter(() => !req.dress_code?.ambiguous)
+    .filter((c) => !/\b(black|white) tie\b/.test(code) && (!formality || c.formality_tags.includes(formality)))
     .filter((c) => !c.colours.some((col) => excluded.has(col)))
+    .filter((c) => req.rules.filter((r) => r.type === "colour_request" && r.colours.length).every((r) => c.colours.some((col) => r.colours.includes(col))))
     .filter((c) => garmentRules.every((r) => {
       const ok = meetsRule(c, r);
       return ok === true;
@@ -262,14 +284,26 @@ export function optionsFor(finding: Pick<Finding, "render_category" | "rule_id">
 
 export type RankedItem = { item: CatalogueItem; reasons: string[]; score: number };
 
-const FORMALITY_FOR: [RegExp, string][] = [[/black tie|white tie|formal|evening/, "formal"], [/cocktail/, "cocktail"], [/business|work|office/, "work"], [/smart/, "smart"]];
+/** Exact bytes and a 64-bit difference hash catch reused files and near-identical crops. */
+export function sameReferenceImage(a: Pick<CatalogueItem, "file" | "source_url">, b: Pick<CatalogueItem, "file" | "source_url">): boolean {
+  if (a.file === b.file || a.source_url === b.source_url) return true;
+  const hashes = fingerprints as Record<string, { sha256: string; dhash: string }>;
+  const x = hashes[a.file], y = hashes[b.file];
+  if (!x || !y) return false;
+  if (x.sha256 === y.sha256) return true;
+  let distance = 0, bits = BigInt(`0x${x.dhash}`) ^ BigInt(`0x${y.dhash}`);
+  while (bits) { distance += Number(bits & BigInt(1)); bits >>= BigInt(1); }
+  return distance <= 4;
+}
+
+const FORMALITY_FOR: [RegExp, string][] = [[/\b(formal|evening)\b/, "formal"], [/\bcocktail\b/, "cocktail"], [/\b(business|work|office)\b/, "work"], [/\bsmart\b/, "smart"]];
 
 /**
  * Every eligible reference in one category, ranked by how well it fits the *confirmed requirements* and the
  * *visible garment* it would replace, each with the reasons it's offered. Inputs are requirements and
  * observed clothing attributes only — never gender, body or appearance.
  */
-export function rankOptions(target: { render_category: RenderCategory; rule_id: string | null }, req: Requirements, observed?: ObservedOutfit): RankedItem[] {
+export function rankOptions(target: { render_category: RenderCategory; rule_id: string | null }, req: Requirements, observed?: ObservedOutfit, excludedIds: readonly string[] = []): RankedItem[] {
   const rule = target.rule_id ? req.rules.find((r) => r.id === target.rule_id) ?? null : null;
   const code = req.dress_code && !req.dress_code.ambiguous ? req.dress_code.value.toLowerCase() : "";
   const wantTag = FORMALITY_FOR.find(([re]) => re.test(code))?.[1] ?? null;
@@ -280,7 +314,17 @@ export function rankOptions(target: { render_category: RenderCategory; rule_id: 
     : observed?.garments.find((g) => (target.render_category === "full_body" ? ["dress", "jumpsuit", "suit"] : target.render_category === "outer" ? ["outerwear"] : ["top", "suit"]).includes(g.category)) ?? null;
   const quote = (r: Rule) => `“${r.evidence_text ?? r.summary}”`;
 
-  return optionsFor(target, req).map((item, order) => {
+  const excludedReferences = CATALOGUE.filter((c) => excludedIds.includes(c.id));
+  const seen: CatalogueItem[] = [];
+  return optionsFor(target, req).filter((item) => {
+    if (excludedIds.includes(item.id) || [...excludedReferences, ...seen].some((other) => sameReferenceImage(item, other))) return false;
+    if (item.category === "shoes" && observed?.shoe_style === item.footwear_style && observed.shoe_colour && item.colours.includes(observed.shoe_colour)) return false;
+    // Conservative attribute comparison: do not present the same named garment and colour
+    // as a new look. This is not an image-level identity claim about the source photo.
+    if (current && item.colours.includes(current.colour) && item.kinds.filter((k) => !["top", "collared", "button-down"].includes(k)).some((k) => new RegExp(`\\b${k}s?\\b`, "i").test(current.description))) return false;
+    seen.push(item);
+    return true;
+  }).map((item, order) => {
     const reasons: string[] = [];
     let score = -order * 0.01; // stable: catalogue order breaks ties
     if (rule?.type === "colour_exclusion") { reasons.push(`Not ${rule.colours.map((c) => COLOUR_LABEL[c]).join(" or ")} — fits ${quote(rule)}`); score += 3; }
