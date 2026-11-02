@@ -12,7 +12,7 @@ export default async function AssessmentPage({ params }: { params: Promise<{ id:
   if (!reqs) redirect(`/check/${check.id}/requirements`);
   const photo = await photoAsset(check);
   if (!photo) redirect(`/check/${check.id}/outfit`);
-  const [assessment, obs] = await Promise.all([currentAssessment(check), latestObservation(check.id, photo.id)]);
+  const [assessment, obs] = await Promise.all([currentAssessment(check), latestObservation(check.id, photo.id, check.requirements_revision)]);
   const [{ older }] = await db()`select count(*)::int as older from wearcheck.render_jobs where check_id = ${check.id} and assessment_id <> ${assessment?.id ?? "00000000-0000-0000-0000-000000000000"}`;
   const r = reqs.json;
   return (
