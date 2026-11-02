@@ -108,6 +108,28 @@ describe.skipIf(!RUN)("render admission and submission (fixtures, no provider ca
     expect(Number(u.units_estimated)).toBe(0);
   }, 60_000);
 
+  it("a provider 5xx after task submission is ambiguous and retains the possible charge", async () => {
+    await clearJobs();
+    const { ProviderError } = await import("@/lib/youcam/client");
+    provider.createTask.mockReset().mockRejectedValue(new ProviderError("PROVIDER_DOWN", "Server error", 502, true));
+    const job = await request("loafer-black-tassel");
+    expect(job.error_code).toBe("SUBMIT_OUTCOME_UNKNOWN");
+    const [usage] = await sql`select status, units_estimated from wearcheck.api_usage_events where render_job_id = ${job.id}`;
+    expect(usage.status).toBe("unknown");
+    expect(Number(usage.units_estimated)).toBe(2);
+    const duplicate = await request("loafer-black-tassel");
+    expect(duplicate.id).toBe(job.id);
+    expect(provider.createTask).toHaveBeenCalledTimes(1);
+  }, 60_000);
+
+  it("a legacy assessment without provider input checks cannot start a render", async () => {
+    await clearJobs();
+    provider.createTask.mockReset();
+    const assessment = { ...fixture.assessment, findings_json: { ...fixture.assessment.findings_json, photo_supports: undefined } };
+    await expect(jobs.requestRender({ check: fixture.check, assessment, findingId: fixture.findingId, reference: { kind: "catalogue", itemId: "loafer-black-tassel" }, explicitRetry: false })).rejects.toMatchObject({ code: "PHOTO_UNSUPPORTED" });
+    expect(provider.createTask).not.toHaveBeenCalled();
+  }, 60_000);
+
   it("a crash after the create-task marker is reconciled as unknown, not resubmitted", async () => {
     await clearJobs();
     provider.createTask.mockReset();
