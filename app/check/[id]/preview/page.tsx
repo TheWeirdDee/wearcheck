@@ -32,7 +32,7 @@ export default async function PreviewPage({ params, searchParams }: { params: Pr
   const finding = assessment?.findings_json.findings.find((f) => f.id === job.finding_id);
   const reqs = await currentRequirements(check);
   const current = Boolean(assessment && job.assessment_id === assessment.id);
-  const initialRecheck = current && finding && reqs ? await previewRecheck(check.id, job.result_asset_id, finding, reqs.json) : null;
+  const initialRecheck = current && reqs ? await previewRecheck(check.id, job.result_asset_id, finding ?? null, reqs.json, reqs.revision) : null;
   // If a garment change leaves the problem, offer the other garment operations this photo supports.
   const supports = assessment?.findings_json.photo_supports;
   const thisCat = (job.feature === "shoes-transfer" ? "shoes" : job.garment_category) as RenderCategory;
@@ -54,7 +54,7 @@ export default async function PreviewPage({ params, searchParams }: { params: Pr
         reason: finding ? finding.reason : "An optional alternative you chose to try.",
       }}
       unresolvedNote={finding && reqs ? unresolvedNote(finding, reqs.json) : null}
-      recheck={{ available: Boolean(current && finding), initial: initialRecheck }}
+      recheck={{ available: current, initial: initialRecheck }}
       alternatives={alternatives}
     />
   );
