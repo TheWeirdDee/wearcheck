@@ -7,7 +7,7 @@ WearCheck reads an invitation (or details you type), asks you to confirm the eve
 It is not a styling chatbot, an attractiveness score, an outfit generator or a shop.
 
 - **Live app:** https://wearcheck.vercel.app
-- **Repository:** https://github.com/TheWeirdDee/wearcheck — the implementation is on branch [`feat/wearcheck-implementation`](https://github.com/TheWeirdDee/wearcheck/tree/feat/wearcheck-implementation). `main` still holds only the initial README; merging needs the owner's go-ahead.
+- **Repository:** https://github.com/TheWeirdDee/wearcheck — the implementation is on [`main`](https://github.com/TheWeirdDee/wearcheck/tree/main).
 - **Licence:** MIT for the source ([LICENSE](LICENSE)); images carry their own licences (see *Assets and licences*)
 - **Product spec:** [`WearCheck_Full_PRD_v1.md`](WearCheck_Full_PRD_v1.md)
 
@@ -234,9 +234,8 @@ Deployment: Vercel project `wearcheck`. Deploy with `vercel deploy --prod --buil
 ## Remaining manual actions
 
 1. **Review the 180-second video**, then authorise submission and any upload. Neither has been done.
-2. **Merge `feat/wearcheck-implementation` into `main`** (or make it the default branch) if judges should land on the app. This wasn't done without your go-ahead.
-3. **Decide whether CC0 without a model release is acceptable** for the site's public showcase ([docs/public-assets.md](docs/public-assets.md)). The video now uses your own photo instead.
-4. **Delete the remaining private test checks now, if wanted.** An automatic review rejected a bulk deletion; see below. Otherwise they expire within 24 hours and the scheduled cleanup removes them.
+2. **Decide whether CC0 without a model release is acceptable** for the site's public showcase ([docs/public-assets.md](docs/public-assets.md)). The video now uses your own photo instead.
+3. **Delete the remaining private test checks now, if wanted.** An automatic review rejected a bulk deletion; see below. Otherwise they expire within 24 hours and the scheduled cleanup removes them.
 
 ## Rejected bulk deletion (preserved, not bypassed)
 
