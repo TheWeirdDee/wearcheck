@@ -119,7 +119,8 @@ export const CATALOGUE: CatalogueItem[] = [
     licence: "CC BY 2.0",
     licence_url: "https://creativecommons.org/licenses/by/2.0/",
     modifications: "Resized and re-encoded as JPEG.",
-    is_purchasable: false, sku: null, enabled: true,
+    // Retained for licence/history records; new selections require an unworn product photo.
+    is_purchasable: false, sku: null, enabled: false,
   },
   {
     id: "flat-black-low-heel",
@@ -321,7 +322,7 @@ export function rankOptions(target: { render_category: RenderCategory; rule_id: 
     if (item.category === "shoes" && observed?.shoe_style === item.footwear_style && observed.shoe_colour && item.colours.includes(observed.shoe_colour)) return false;
     // Conservative attribute comparison: do not present the same named garment and colour
     // as a new look. This is not an image-level identity claim about the source photo.
-    if (current && item.colours.includes(current.colour) && item.kinds.filter((k) => !["top", "collared", "button-down"].includes(k)).some((k) => new RegExp(`\\b${k}s?\\b`, "i").test(current.description))) return false;
+    if (current && item.colours.length === 1 && item.colours[0] === current.colour && item.kinds.filter((k) => !["top", "collared", "button-down"].includes(k)).some((k) => new RegExp(`\\b${k}s?\\b`, "i").test(current.description))) return false;
     seen.push(item);
     return true;
   }).map((item, order) => {
